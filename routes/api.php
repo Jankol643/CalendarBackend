@@ -22,7 +22,6 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::get('/events', [EventController::class, 'getFullCalendarEvents']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/calendars', [CalendarController::class, 'index']);
     Route::post('/calendars', [CalendarController::class, 'store']);
@@ -32,6 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 Route::group(['prefix' => 'events'], function () {
+    Route::get('/', [EventController::class, 'index']);
     Route::post('/', [EventController::class, 'store'])->name('events.create');
     Route::get('/{id}', [EventController::class, 'show'])->name('events.show');
     Route::put('/{id}', [EventController::class, 'update'])->name('events.update');
@@ -45,9 +45,13 @@ Route::group(['prefix' => 'tasks'], function () {
     Route::delete('/{id}', [TaskController::class, 'destroy'])->name('tasks.destroy');
 });
 
-Route::group(['prefix' => 'auth'], function () {
+Route::group([
+    'middleware' => 'api',
+    'prefix' => 'auth'
+], function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/refresh', [AuthController::class, 'refresh']);
     Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/me', [AuthController::class, 'me']);
 });

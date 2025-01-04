@@ -19,7 +19,6 @@ use DateTime;
  * @property \DateTime $start_date
  * @property \DateTime $end_date
  * @property bool $all_day
- * @property int $user_id
  */
 class Event extends Model {
     protected $table = 'events';
@@ -54,25 +53,5 @@ class Event extends Model {
 
     public static function get_all() {
         return self::all();
-    }
-
-    /**
-     * Convert all events to FullCalendar format.
-     *
-     * @return array
-     */
-    public static function toFullCalendarFormat() {
-        return self::all()->map(function ($event) {
-            return [
-                'id' => $event->id,
-                'title' => $event->title,
-                'start' => \Carbon\Carbon::parse($event->start_date)->toIso8601String(),
-                'end' => \Carbon\Carbon::parse($event->end_date)->toIso8601String(),
-                'allDay' => $event->all_day,
-                'extendedProps' => [
-                    'description' => $event->description
-                ],
-            ];
-        })->toArray();
     }
 }

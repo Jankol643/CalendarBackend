@@ -8,6 +8,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class EventController extends Controller {
+    public function index(): JsonResponse {
+        $events = Event::all();
+        return response()->json($events, 200);
+    }
+
     function store(Request $request): JsonResponse {
         $request = $this->parseRequest($request);
         DB::beginTransaction();
