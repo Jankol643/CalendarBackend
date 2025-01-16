@@ -18,37 +18,38 @@ use App\Http\Controllers\AuthController;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+Route::middleware('auth:api')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth:api')->group(function () {
     Route::get('/calendars', [CalendarController::class, 'index']);
     Route::post('/calendars', [CalendarController::class, 'store']);
     Route::get('/calendars/{id}', [CalendarController::class, 'show']);
     Route::put('/calendars/{id}', [CalendarController::class, 'update']);
     Route::delete('/calendars/{id}', [CalendarController::class, 'destroy']);
+
+    // Events routes
+    Route::prefix('/calendars/{calendarId}/events')->group(function () {
+        Route::get('/', [EventController::class, 'index']);
+        Route::post('/', [EventController::class, 'store']);
+        Route::get('/{id}', [EventController::class, 'show']);
+        Route::put('/{id}', [EventController::class, 'update']);
+        Route::delete('/{id}', [EventController::class, 'destroy']);
+    });
+
+    // Tasks routes
+    Route::prefix('/calendars/{calendarId}/tasks')->group(function () {
+        Route::get('/', [TaskController::class, 'index']);
+        Route::post('/', [TaskController::class, 'store']);
+        Route::get('/{id}', [TaskController::class, 'show']);
+        Route::put('/{id}', [TaskController::class, 'update']);
+        Route::delete('/{id}', [TaskController::class, 'destroy']);
+    });
 });
 
-Route::group(['prefix' => 'events'], function () {
-    Route::get('/', [EventController::class, 'index']);
-    Route::post('/', [EventController::class, 'store'])->name('events.create');
-    Route::get('/{id}', [EventController::class, 'show'])->name('events.show');
-    Route::put('/{id}', [EventController::class, 'update'])->name('events.update');
-    Route::delete('/{id}', [EventController::class, 'destroy'])->name('events.destroy');
-});
-
-Route::group(['prefix' => 'tasks'], function () {
-    Route::post('/', [TaskController::class, 'store'])->name('tasks.create');
-    Route::get('/{id}', [TaskController::class, 'show'])->name('tasks.show');
-    Route::put('/{id}', [TaskController::class, 'update'])->name('tasks.update');
-    Route::delete('/{id}', [TaskController::class, 'destroy'])->name('tasks.destroy');
-});
-
-Route::group([
-    'middleware' => 'api',
-    'prefix' => 'auth'
-], function () {
+// Authentication routes
+Route::group(['prefix' => 'auth'], function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/refresh', [AuthController::class, 'refresh']);

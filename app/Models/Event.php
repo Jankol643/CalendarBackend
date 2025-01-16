@@ -30,13 +30,10 @@ class Event extends Model {
         'start_date',
         'end_date',
         'all_day',
+        'location',
         'calendar_id',
         'created_at',
         'updated_at'
-    ];
-
-    protected $guarded = [
-        'location'
     ];
 
     public function location() {

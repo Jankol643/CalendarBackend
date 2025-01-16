@@ -20,6 +20,7 @@ class EventSeeder extends Seeder {
             'description' => 'Celebrate John\'s birthday with a party.',
             'start_date' => '2024-10-01 00:00:00',
             'end_date' => '2024-10-01 23:59:59',
+            'location' => '94 Towne Alley, Xiawa',
             'all_day' => true,
             'calendar_id' => $calendar->id,
         ]);
@@ -38,6 +39,7 @@ class EventSeeder extends Seeder {
             $description = 'Random description for event ' . $i;
             $startDate = date('Y-m-d H:i:s', mt_rand(strtotime('2022-01-01 00:00:00'), strtotime('2022-12-31 23:59:59')));
             $endDate = date('Y-m-d H:i:s', mt_rand(strtotime($startDate), strtotime('+2 hours')));
+            $location = bin2hex(random_bytes(16));
             $allDay = mt_rand(0, 1) === 0;
             $userId = 1;
 
@@ -47,6 +49,7 @@ class EventSeeder extends Seeder {
             $event->description = $description;
             $event->start_date = $startDate;
             $event->end_date = $endDate;
+            $event->location = $location;
             $event->all_day = $allDay;
             $event->user_id = $userId;
 
