@@ -14,10 +14,10 @@ return new class extends Migration {
         Schema::create('events', function (Blueprint $table) {
             $table->id();
             $table->string('title');
-            $table->text('description');
+            $table->text('description')->nullable();
+            $table->string('location')->nullable();
             $table->dateTime('start_date');
             $table->dateTime('end_date');
-            $table->string('location');
             $table->boolean('all_day')->default(false);
             $table->foreignId('calendar_id')->constrained()->onDelete('cascade');
             $table->timestamps();

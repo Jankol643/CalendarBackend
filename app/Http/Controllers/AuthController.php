@@ -99,10 +99,18 @@ class AuthController extends Controller {
      *
      */
     public function refresh(): JsonResponse {
+        // Check if the user is authenticated
+        if (!Auth::check()) {
+            return response()->json(['status' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        // Refresh the token
+        $newToken = Auth::refresh(true);
+
         return response()->json([
             'status' => true,
             'authorisation' => [
-                'token' => Auth::refresh(true),
+                'token' => $newToken,
                 'type' => 'bearer',
             ],
         ]);

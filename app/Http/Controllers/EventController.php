@@ -18,17 +18,26 @@ class EventController extends Controller {
         }
     }
 
-    public function store(Request $request, $calendarId) {
+    public function store(Request $request) {
         $request->validate([
             'title' => 'required|string',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
-            'calendar_id' => 'required|exists:calendars,id',
+            'startDate' => 'required|date',
+            'endDate' => 'required|date|after:startDate',
+            'calendar' => 'required|exists:calendars,id',
         ]);
 
         DB::beginTransaction();
         try {
-            $event = Event::create($request->all());
+            $event = new Event([
+                'title' => $request->input('title'),
+                'description' => $request->input('description'),
+                'location' => $request->input('location'),
+                'start_date' => $request->input('startDate'),
+                'end_date' => $request->input('endDate'),
+                'calendar_id' => $request->input('calendar'),
+            ]);
+            $event->save();
+
             DB::commit();
             return response()->json($event, 201);
         } catch (QueryException $e) {
