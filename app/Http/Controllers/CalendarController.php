@@ -7,37 +7,108 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class CalendarController extends Controller {
+    // Retrieve all calendars for the authenticated user
     public function index() {
-        $calendars = Calendar::where('user_id', Auth::id())->get();
-        return response()->json($calendars);
+        try {
+            $calendars = Calendar::where('user_id', Auth::id())->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $calendars,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch calendars.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
+    // Create a new calendar for the authenticated user
     public function store(Request $request) {
-        $request->validate(['user_id' => 'required|exists:users,id']);
-        $calendar = Calendar::create(['user_id' => $request->user_id]);
-        return response()->json($calendar, 201);
+        try {
+            $request->validate([
+                'name' => 'required|string|max:255', // Example: Add a name field for the calendar
+            ]);
+
+            $calendar = Calendar::create([
+                'user_id' => Auth::id(),
+                'name' => $request->input('name'),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => $calendar,
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create calendar.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
-    public function show($id) {
-        $calendar = Calendar::findOrFail($id);
-        return response()->json($calendar);
+    // Show a specific calendar (only if it belongs to the authenticated user)
+    public function show(Calendar $calendar) {
+        try {
+            $this->authorize('view', $calendar); // Ensure the user owns the calendar
+
+            return response()->json([
+                'success' => true,
+                'data' => $calendar,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch calendar.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
-    public function update(Request $request, $id) {
-        $calendar = Calendar::findOrFail($id);
-        $request->validate(['user_id' => 'sometimes|required|exists:users,id']);
-        $calendar->update($request->only('user_id'));
-        return response()->json($calendar);
+    // Update a specific calendar (only if it belongs to the authenticated user)
+    public function update(Request $request, Calendar $calendar) {
+        try {
+            $this->authorize('update', $calendar); // Ensure the user owns the calendar
+
+            $request->validate([
+                'name' => 'sometimes|required|string|max:255',
+            ]);
+
+            $calendar->update($request->only('name'));
+
+            return response()->json([
+                'success' => true,
+                'data' => $calendar,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update calendar.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
-    public function destroy($id) {
-        $calendar = Calendar::findOrFail($id);
-        $calendar->delete();
-        return response()->json(null, 204);
-    }
+    // Delete a specific calendar (only if it belongs to the authenticated user)
+    public function destroy(Calendar $calendar) {
+        try {
+            $this->authorize('delete', $calendar); // Ensure the user owns the calendar
 
-    public function getUserCalendars() {
-        $calendars = Calendar::where('user_id', Auth::id())->get();
-        return response()->json($calendars);
+            $calendar->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Calendar deleted successfully.',
+            ], 204);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete calendar.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 }

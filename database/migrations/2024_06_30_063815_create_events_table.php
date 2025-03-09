@@ -18,6 +18,7 @@ return new class extends Migration {
             $table->string('location')->nullable();
             $table->dateTime('start_date');
             $table->dateTime('end_date');
+            $table->string('timezone');
             $table->boolean('all_day')->default(false);
             $table->foreignId('calendar_id')->constrained()->onDelete('cascade');
             $table->timestamps();

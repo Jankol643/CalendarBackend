@@ -1,13 +1,5 @@
 <?php
 
-use App\Http\Controllers\EventController;
-use App\Http\Controllers\HomeController;
-use App\Http\Controllers\CalendarController;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Auth;
-use App\Http\Controllers\TaskController;
-use App\Models\Calendar;
-
 /*
 |--------------------------------------------------------------------------
 | Web Routes

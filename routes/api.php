@@ -1,11 +1,11 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\TimezoneController;
 
 /*
 |--------------------------------------------------------------------------
@@ -18,11 +18,7 @@ use App\Http\Controllers\AuthController;
 |
 */
 
-Route::middleware('auth:api')->get('/user', function (Request $request) {
-    return $request->user();
-});
-
-Route::middleware('auth:api')->group(function () {
+Route::middleware(['api', 'auth.jwt'])->group(function () {
     Route::get('/calendars', [CalendarController::class, 'index']);
     Route::post('/calendars', [CalendarController::class, 'store']);
     Route::get('/calendars/{id}', [CalendarController::class, 'show']);
@@ -52,7 +48,7 @@ Route::middleware('auth:api')->group(function () {
 Route::group(['prefix' => 'auth'], function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/logout', [AuthController::class, 'logout']);
-    Route::post('/refresh', [AuthController::class, 'refresh']);
     Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/me', [AuthController::class, 'me']);
 });
+
+Route::get('/timezones', [TimezoneController::class, 'getTimezones']);

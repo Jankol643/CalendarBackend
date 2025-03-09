@@ -20,6 +20,7 @@ class EventSeeder extends Seeder {
             'description' => 'Celebrate John\'s birthday with a party.',
             'start_date' => '2024-10-01 00:00:00',
             'end_date' => '2024-10-01 23:59:59',
+            'timezone' => 'Europe/Vienna',
             'location' => '94 Towne Alley, Xiawa',
             'all_day' => true,
             'calendar_id' => $calendar->id,
