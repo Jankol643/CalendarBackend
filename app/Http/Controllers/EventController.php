@@ -4,86 +4,148 @@ namespace App\Http\Controllers;
 
 use App\Models\Event;
 use App\Models\Calendar;
+use App\Models\Task;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Services\ScheduleService;
+use App\Http\Controllers\Helpers\UploadException;
+use App\Services\CsvImportService;
+use App\Services\FileHandler;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\ValidationException;
 
 class EventController extends Controller {
+    /**
+     * Helper method to validate event request data.
+     */
+    private function validateEventRequest(Request $request, $isUpdate = false) {
+        $rules = [
+            'title' => 'required|string',
+            'start_datetime' => 'required|date_format:Y-m-d\TH:i:s\Z',
+            'end_datetime' => [
+                'required',
+                'date_format:Y-m-d\TH:i:s\Z',
+                // For update, we'll add a custom validation for order
+            ],
+            'calendar_id' => 'required|exists:calendars,id',
+            'timezone' => 'required|string'
+        ];
+
+        if ($isUpdate) {
+            // For update, validation can be more flexible
+            $rules['start_datetime'] = 'sometimes|nullable|date_format:Y-m-d\TH:i:s\Z';
+            $rules['end_datetime'] = 'sometimes|nullable|date_format:Y-m-d\TH:i:s\Z|after_or_equal:start_datetime';
+        } else {
+            // For creation, validate that end_date is after start_date
+            $rules['end_datetime'] = 'required|date_format:Y-m-d\TH:i:s\Z|after:start_datetime';
+        }
+
+        // Additional optional fields
+        $rules['description'] = 'sometimes|nullable|string';
+        $rules['location'] = 'sometimes|nullable|string';
+
+        $request->validate($rules);
+    }
+
+    /**
+     * Utility method to parse ISO8601 date strings into UTC Carbon instances.
+     */
+    private function parseDateTimeToUTC($datetimeStr) {
+        return Carbon::createFromFormat('Y-m-d\TH:i:s\Z', $datetimeStr, 'UTC')->setTimezone('UTC');
+    }
+
     public function index($calendarId) {
+        Log::debug('Entering EventController@index', ['calendarId' => $calendarId, 'user_id' => Auth::id()]);
+
         try {
-            // Authorize access to the calendar using the policy
             $calendar = Calendar::findOrFail($calendarId);
             $this->authorize('view', $calendar);
 
-            // Fetch events for the authorized calendar
             $events = Event::where('calendar_id', $calendar->id)->get();
+
+            Log::info('Fetched events for calendar', ['calendar_id' => $calendar->id, 'event_count' => $events->count()]);
             return response()->json($events);
         } catch (ModelNotFoundException $e) {
+            Log::warning('Calendar not found in EventController@index', ['calendarId' => $calendarId, 'user_id' => Auth::id()]);
             return response()->json(['error' => 'Calendar not found.'], 404);
         } catch (\Exception $e) {
+            Log::error('Unexpected error in EventController@index', [
+                'error' => $e->getMessage(),
+                'user_id' => Auth::id(),
+                'stack' => $e->getTraceAsString()
+            ]);
             return response()->json(['error' => 'An unexpected error occurred: ' . $e->getMessage()], 500);
         }
     }
 
     public function store(Request $request) {
-        $request->validate([
-            'title' => 'required|string',
-            'start_date' => 'required|date_format:Y-m-d\TH:i:s.u\Z',
-            'end_date' => 'required|date_format:Y-m-d\TH:i:s.u\Z|after:start_date',
-            'calendar_id' => 'required|exists:calendars,id',
-        ]);
+        Log::debug('Entering EventController@store', ['user_id' => Auth::id(), 'request_data' => $request->all()]);
+
+        $this->validateEventRequest($request);
 
         DB::beginTransaction();
         try {
-            // Authorize access to the calendar using the policy
             $calendar = Calendar::findOrFail($request->input('calendar_id'));
             $this->authorize('view', $calendar);
 
-            // Convert ISO 8601 to MySQL-compatible format
-            $startDate = Carbon::parse($request->input('start_date'))->toDateTimeString();
-            $endDate = Carbon::parse($request->input('end_date'))->toDateTimeString();
+            $timezone = $request->input('timezone');
 
-            // Create the event
+            $startDate = $this->parseDateTimeToUTC($request->input('start_datetime'));
+            $endDate = $this->parseDateTimeToUTC($request->input('end_datetime'));
+
             $event = Event::create([
                 'title' => $request->input('title'),
-                'description' => $request->input('description'),
-                'location' => $request->input('location'),
-                'start_date' => $startDate,
-                'end_date' => $endDate,
-                'timezone' => $request->input('timezone'),
+                'description' => $request->input('description', null),
+                'location' => $request->input('location', null),
+                'start_datetime' => $startDate,
+                'end_datetime' => $endDate,
+                'timezone' => $timezone,
                 'calendar_id' => $calendar->id
             ]);
 
             DB::commit();
+            Log::info('Event created successfully', ['event_id' => $event->id, 'user_id' => Auth::id()]);
             return response()->json($event, 201);
         } catch (ModelNotFoundException $e) {
             DB::rollBack();
+            Log::warning('Calendar not found in EventController@store', ['calendar_id' => $request->input('calendar_id'), 'user_id' => Auth::id()]);
             return response()->json(['error' => 'Calendar not found.'], 404);
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('Error creating event in EventController@store', [
+                'error' => $e->getMessage(),
+                'user_id' => Auth::id(),
+                'stack' => $e->getTraceAsString()
+            ]);
             return response()->json(['error' => 'An unexpected error occurred: ' . $e->getMessage()], 500);
         }
     }
 
     public function show($calendarId, $id) {
+        Log::debug('Entering EventController@show', ['calendarId' => $calendarId, 'eventId' => $id, 'user_id' => Auth::id()]);
+
         try {
             $calendar = Calendar::findOrFail($calendarId);
             $this->authorize('view', $calendar);
 
             $event = Event::where('calendar_id', $calendar->id)->findOrFail($id);
 
-            // Convert event dates to user's local timezone
-            $userTimezone = Auth::user()->timezone; // or get from user settings
+            $userTimezone = Auth::user()->timezone ?? 'UTC';
+
             $startDate = Carbon::createFromFormat('Y-m-d H:i:s', $event->start_date, 'UTC')
                 ->setTimezone($userTimezone)
-                ->format('Y-m-d\TH:i:s.u\Z');
+                ->format('Y-m-d\TH:i:s\Z');
             $endDate = Carbon::createFromFormat('Y-m-d H:i:s', $event->end_date, 'UTC')
                 ->setTimezone($userTimezone)
-                ->format('Y-m-d\TH:i:s.u\Z');
+                ->format('Y-m-d\TH:i:s\Z');
 
+            Log::info('Event retrieved', ['event_id' => $event->id, 'user_id' => Auth::id()]);
             return response()->json([
+                'id' => $event->id,
                 'title' => $event->title,
                 'start_date' => $startDate,
                 'end_date' => $endDate,
@@ -92,52 +154,87 @@ class EventController extends Controller {
                 'timezone' => $event->timezone,
             ]);
         } catch (ModelNotFoundException $e) {
+            Log::warning('Event or Calendar not found in EventController@show', ['calendarId' => $calendarId, 'eventId' => $id, 'user_id' => Auth::id()]);
             return response()->json(['error' => 'Event or Calendar not found.'], 404);
         } catch (\Exception $e) {
+            Log::error('Unexpected error in EventController@show', [
+                'error' => $e->getMessage(),
+                'user_id' => Auth::id(),
+                'stack' => $e->getTraceAsString()
+            ]);
             return response()->json(['error' => 'An unexpected error occurred: ' . $e->getMessage()], 500);
         }
     }
 
     public function update(Request $request, $calendarId, $id) {
+        Log::debug('Entering EventController@update', ['calendarId' => $calendarId, 'eventId' => $id, 'user_id' => Auth::id()]);
+
+        $this->validateEventRequest($request, true);
+
         DB::beginTransaction();
         try {
-            // Authorize access to the calendar using the policy
             $calendar = Calendar::findOrFail($calendarId);
             $this->authorize('view', $calendar);
 
-            // Fetch and update the event
             $event = Event::where('calendar_id', $calendar->id)->findOrFail($id);
-            $event->update($request->all());
+
+            $data = $request->all();
+
+            if (isset($data['start_datetime'])) {
+                $data['start_date'] = $this->parseDateTimeToUTC($data['start_datetime']);
+                unset($data['start_datetime']);
+            }
+
+            if (isset($data['end_datetime'])) {
+                $data['end_date'] = $this->parseDateTimeToUTC($data['end_datetime']);
+                unset($data['end_datetime']);
+            }
+
+            $event->update($data);
 
             DB::commit();
+            Log::info('Event updated successfully', ['event_id' => $event->id, 'user_id' => Auth::id()]);
             return response()->json($event);
         } catch (ModelNotFoundException $e) {
             DB::rollBack();
+            Log::warning('Event or Calendar not found in EventController@update', ['calendarId' => $calendarId, 'eventId' => $id, 'user_id' => Auth::id()]);
             return response()->json(['error' => 'Event or Calendar not found.'], 404);
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('Error updating event in EventController@update', [
+                'error' => $e->getMessage(),
+                'user_id' => Auth::id(),
+                'stack' => $e->getTraceAsString()
+            ]);
             return response()->json(['error' => 'An unexpected error occurred: ' . $e->getMessage()], 500);
         }
     }
 
     public function destroy($calendarId, $id) {
+        Log::debug('Entering EventController@destroy', ['calendarId' => $calendarId, 'eventId' => $id, 'user_id' => Auth::id()]);
+
         DB::beginTransaction();
         try {
-            // Authorize access to the calendar using the policy
             $calendar = Calendar::findOrFail($calendarId);
             $this->authorize('view', $calendar);
 
-            // Fetch and delete the event
             $event = Event::where('calendar_id', $calendar->id)->findOrFail($id);
             $event->delete();
 
             DB::commit();
+            Log::info('Event deleted', ['event_id' => $event->id, 'user_id' => Auth::id()]);
             return response()->json(null, 204);
         } catch (ModelNotFoundException $e) {
             DB::rollBack();
+            Log::warning('Event or Calendar not found in EventController@destroy', ['calendarId' => $calendarId, 'eventId' => $id, 'user_id' => Auth::id()]);
             return response()->json(['error' => 'Event or Calendar not found.'], 404);
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('Error deleting event in EventController@destroy', [
+                'error' => $e->getMessage(),
+                'user_id' => Auth::id(),
+                'stack' => $e->getTraceAsString()
+            ]);
             return response()->json(['error' => 'An unexpected error occurred: ' . $e->getMessage()], 500);
         }
     }

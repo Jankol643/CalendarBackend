@@ -16,14 +16,14 @@ class TimezoneController extends Controller {
 
             return [
                 'name' => $timezone,
-                'offset' => $formattedOffset,
+                'utcOffset' => $formattedOffset,
             ];
         }, DateTimeZone::listIdentifiers());
 
         // Sort the timezones by offset first, then by name
         usort($timezones, function ($a, $b) {
             // Compare by offset
-            $offsetComparison = strcmp($a['offset'], $b['offset']);
+            $offsetComparison = strcmp($a['utcOffset'], $b['utcOffset']);
             if ($offsetComparison === 0) {
                 // If offsets are the same, compare by name
                 return strcmp($a['name'], $b['name']);

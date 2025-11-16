@@ -22,19 +22,24 @@ use DateTime;
  */
 class Event extends Model {
     protected $table = 'events';
+    protected $primaryKey = 'id'; // default
 
     protected $fillable = [
-        'id',
         'title',
         'description',
-        'start_date',
-        'end_date',
+        'start_datetime',
+        'end_datetime',
         'timezone',
         'all_day',
         'location',
         'calendar_id',
-        'created_at',
-        'updated_at'
+        'uploaded'
+    ];
+
+    protected $casts = [
+        'start_datetime' => 'datetime',
+        'end_datetime' => 'datetime',
+        'all_day' => 'boolean',
     ];
 
     public function location() {
@@ -51,5 +56,11 @@ class Event extends Model {
 
     public static function get_all() {
         return self::all();
+    }
+
+    public static function getDateFields(): array {
+        return array_keys(array_filter(self::$casts, function ($castType, $field) {
+            return $castType === 'datetime';
+        }, ARRAY_FILTER_USE_BOTH));
     }
 }

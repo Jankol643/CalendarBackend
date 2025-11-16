@@ -7,6 +7,8 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use PHPOpenSourceSaver\JWTAuth\Contracts\JWTSubject;
+use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
+use Illuminate\Support\Facades\Auth;
 
 class User extends Authenticatable implements JWTSubject {
     use HasApiTokens, HasFactory, Notifiable;
@@ -17,7 +19,6 @@ class User extends Authenticatable implements JWTSubject {
      * @var array<int, string>
      */
     protected $fillable = [
-        'name',
         'email',
         'password'
     ];
@@ -57,5 +58,27 @@ class User extends Authenticatable implements JWTSubject {
      */
     public function getJWTCustomClaims() {
         return [];
+    }
+
+    /**
+     * Check if the user's token has expired.
+     *
+     * @return bool
+     */
+    public function isTokenExpired(?string $token = null): bool {
+        // Get the current token expiration time
+        if (!$token) {
+            return true; // No token means it is considered expired
+        }
+
+        try {
+            // Decode the token to get its payload
+            $payload = (array) JWTAuth::setToken($token)->getPayload(); // Use JWTAuth to decode
+
+            // Check if 'exp' (expiration time) exists and compare with current time
+            return isset($payload['exp']) && $payload['exp'] < time();
+        } catch (\Exception $e) {
+            return true; // If decoding fails, consider token expired
+        }
     }
 }

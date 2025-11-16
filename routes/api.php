@@ -5,7 +5,10 @@ use App\Http\Controllers\EventController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CsvImportController;
 use App\Http\Controllers\TimezoneController;
+use App\Services\CsvImportService;
+use App\Services\ScheduleService;
 
 /*
 |--------------------------------------------------------------------------
@@ -42,6 +45,9 @@ Route::middleware(['api', 'auth.jwt'])->group(function () {
         Route::put('/{id}', [TaskController::class, 'update']);
         Route::delete('/{id}', [TaskController::class, 'destroy']);
     });
+
+    Route::get('/schedule', [ScheduleService::class, 'schedule']);
+    Route::post('/CSVInput', [CsvImportController::class, 'readFromCSV']);
 });
 
 // Authentication routes
@@ -49,6 +55,10 @@ Route::group(['prefix' => 'auth'], function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/refresh', [AuthController::class, 'refresh']);
 });
 
 Route::get('/timezones', [TimezoneController::class, 'getTimezones']);
+Route::options('/api/CSVInput', function () {
+    return response()->json(['status' => 'OK']);
+});

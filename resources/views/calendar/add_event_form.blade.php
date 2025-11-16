@@ -19,16 +19,16 @@
                                 <input type="date" class="form-control @error('start_date') is-invalid @enderror" id="start_date" name="start_date" value="{{ old('start_date') }}">
                             </div>
                             <div id="starttime-group" class="form-group">
-                                <label class="control-label" for="start_time">Start Time</label>
-                                <input type="time" class="form-control @error('start_time') is-invalid @enderror" id="start_time" name="start_time" value="{{ old('start_time') }}">
+                                <label class="control-label" for="start_datetime">Start Time</label>
+                                <input type="time" class="form-control @error('start_datetime') is-invalid @enderror" id="start_datetime" name="start_datetime" value="{{ old('start_datetime') }}">
                             </div>
                             <div id="enddate-group" class="form-group">
                                 <label class="control-label" for="end_date">End Date</label>
                                 <input type="date" class="form-control @error('end_date') is-invalid @enderror" id="end_date" name="end_date" value="{{ old('end_date') }}">
                             </div>
                             <div id="endtime-group" class="form-group">
-                                <label class="control-label" for="end_time">End Time</label>
-                                <input type="time" class="form-control" id="end_time" name="end_time">
+                                <label class="control-label" for="end_datetime">End Time</label>
+                                <input type="time" class="form-control" id="end_datetime" name="end_datetime">
                             </div>
                             <div id="description-group" class="form-group">
                                 <label class="control-label" for="description">Description</label>
