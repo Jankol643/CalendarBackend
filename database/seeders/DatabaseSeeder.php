@@ -15,8 +15,8 @@ class DatabaseSeeder extends Seeder {
             UserSeeder::class,
             CategorySeeder::class,
             CalendarSeeder::class,
-            EventSeeder::class,
-            TaskSeeder::class
+            //EventSeeder::class,
+            //TaskSeeder::class
         ]);
     }
 }
