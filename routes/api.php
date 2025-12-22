@@ -8,6 +8,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CsvImportController;
 use App\Http\Controllers\TimezoneController;
 use App\Services\CsvImportService;
+use App\Services\ExportService;
 use App\Services\ScheduleService;
 
 /*
@@ -48,6 +49,7 @@ Route::middleware(['api', 'auth.jwt'])->group(function () {
 
     Route::get('/schedule', [ScheduleService::class, 'schedule']);
     Route::post('/CSVInput', [CsvImportController::class, 'readFromCSV']);
+    Route::get('/export', [ExportService::class, 'exportEntries']);
 });
 
 // Authentication routes

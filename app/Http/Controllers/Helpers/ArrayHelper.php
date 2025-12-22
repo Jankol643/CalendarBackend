@@ -106,7 +106,7 @@ class ArrayHelper {
             $chunk = array_slice($data, 0, $chunkSize);
 
             // Log the chunk to the debug log
-            Log::debug($arrayName . " chunk: " . print_r($chunk, true));
+            AppLogger::debug($arrayName . " chunk: " . print_r($chunk, true));
 
             // Remove the chunk from the data array
             $data = array_slice($data, $chunkSize);

@@ -23,7 +23,7 @@ return [
 
     'allowed_origins_patterns' => [],
 
-    'allowed_headers' => ['Content-Type', 'Authorization', 'X-Upload-Id'], // or just ['*']
+    'allowed_headers' => ['*'],
 
     'exposed_headers' => [],
 

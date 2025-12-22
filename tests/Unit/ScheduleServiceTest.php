@@ -16,7 +16,7 @@ class ScheduleServiceTest extends TestCase {
     protected function setUp(): void {
         parent::setUp();
         // Disable actual logging during tests
-        Log::swap(new class {
+        AppLogger::swap(new class {
             public function debug() {
             }
             public function warning() {

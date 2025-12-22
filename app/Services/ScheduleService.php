@@ -16,35 +16,49 @@ class ScheduleService {
     private Collection $tasks;
 
     public function schedule(Request $request) {
-        $uploadedId = $this->getUploadIdFromRequest($request);
-        $this->loadEventsAndTasks($uploadedId);
+        try {
+            // Validate request headers
+            $uploadedId = $this->getUploadIdFromRequest($request);
+            $this->loadEventsAndTasks($uploadedId);
+        } catch (Exception $e) {
+            AppLogger::error("Failed to load data: " . $e->getMessage());
+            return response()->json(['Failed to load data' . $e->getMessage(), 500]);
+        }
 
         $sortedTasks = $this->sortTasksByPriorityAndDueDate();
 
         $scheduledTasks = [];
         /** @var Task $task */
         foreach ($sortedTasks as $task) {
+            // Validate task data
             if (!$task->parent_task_id) {
-                Log::debug("Scheduling task ID {$task->id} ('{$task->name}')");
+                if (!isset($task->duration, $task->due_date)) {
+                    AppLogger::warning("Task ID {$task->id} missing 'duration' or 'due_date'");
+                    continue; // skip invalid task
+                }
+                if ($task->duration <= 0) {
+                    AppLogger::warning("Task ID {$task->id} has non-positive duration");
+                    continue; // skip invalid task
+                }
+                AppLogger::debug("Scheduling task ID {$task->id} ('{$task->name}')");
                 $taskParts = $this->scheduleTaskWithSplitting($task);
                 if ($taskParts) {
                     $scheduledTasks = array_merge($scheduledTasks, $taskParts);
                 } else {
-                    Log::warning("Task ID {$task->id} ('{$task->name}') could not be scheduled.");
+                    AppLogger::warning("Task ID {$task->id} ('{$task->name}') could not be scheduled.");
                 }
             }
         }
-        Log::debug('Scheduled task parts: ' . json_encode(array_map(fn($t) => [
+        AppLogger::debug('Scheduled task parts: ' . json_encode(array_map(fn($t) => [
             'id' => $t->id,
             'start' => $t->start_datetime,
             'end' => $t->end_datetime
         ], $scheduledTasks)));
 
         $combined = $this->combineEventsAndTasks($this->events, $scheduledTasks);
-
         usort($combined, fn($a, $b) => $a['start_datetime']->getTimestamp() - $b['start_datetime']->getTimestamp());
 
-        return $combined;
+        return response()->json([$combined], 200);
     }
 
     private function getUploadIdFromRequest(Request $request): string {
@@ -52,40 +66,51 @@ class ScheduleService {
         if (!$uploadedId) {
             throw new InvalidArgumentException("Missing 'X-Upload-ID' header");
         }
-        Log::debug("Received upload ID: {$uploadedId}");
+        AppLogger::debug("Received upload ID: {$uploadedId}");
         return $uploadedId;
     }
 
     private function loadEventsAndTasks(string $uploadedId): void {
-        Log::debug("Loading data for Upload ID: {$uploadedId}");
-        $this->events = Event::where('uploaded', $uploadedId)->get();
-        $this->tasks = Task::where('uploaded', $uploadedId)->get();
-
-        Log::debug('Loaded Events: ' . json_encode($this->events));
-        Log::debug('Loaded Tasks: ' . json_encode($this->tasks));
+        AppLogger::debug("Loading data for Upload ID: {$uploadedId}");
+        // Wrap in try-catch for safety
+        try {
+            $this->events = Event::where('uploaded', $uploadedId)->get();
+            $this->tasks = Task::where('uploaded', $uploadedId)->get();
+        } catch (Exception $e) {
+            AppLogger::error("Data loading failed: " . $e->getMessage());
+            throw $e;
+        }
+        // TODO: Add pagination or limits if data sets are large
+        AppLogger::debug('Loaded Events: ' . json_encode($this->events));
+        AppLogger::debug('Loaded Tasks: ' . json_encode($this->tasks));
     }
 
     private function sortTasksByPriorityAndDueDate(): Collection {
         return $this->tasks->sort(function ($a, $b) {
-            // First, compare by due_date
-            $dueDateComparison = strcmp($a->due_date, $b->due_date);
+            // Handle null due_date
+            $dueDateA = $a->due_date ?? '';
+            $dueDateB = $b->due_date ?? '';
+            $dueDateComparison = strcmp($dueDateA, $dueDateB);
             if ($dueDateComparison !== 0) {
                 return $dueDateComparison;
             }
             // Then, compare by priority descending
-            return $b->priority - $a->priority;
+            return ($b->priority ?? 0) - ($a->priority ?? 0);
         });
     }
 
     private function scheduleTaskWithSplitting($task): array {
+        // Validate task duration
         $remainingDuration = $task->duration;
         if (!$remainingDuration || $remainingDuration <= 0) {
-            Log::warning("Task ID {$task->id} has invalid duration: {$task->duration}");
+            AppLogger::warning("Task ID {$task->id} has invalid duration: {$task->duration}");
             return [];
         }
 
+        // Convert due_date
         $dueDate = $this->convertToDateTimeImmutable($task->due_date);
         if (!$dueDate) {
+            AppLogger::warning("Task ID {$task->id} has invalid due_date");
             return [];
         }
         $endTimeLimit = $dueDate;
@@ -97,15 +122,19 @@ class ScheduleService {
 
         $currentTime = $initialTime;
 
-        while ($remainingDuration > 0 && $currentTime < $endTimeLimit) {
-            // Ensure only minutes are set for start and end dates
+        $maxDays = 14; // Add safety limit to avoid infinite loop
+        $dayCount = 0;
+
+        while ($remainingDuration > 0 && $currentTime < $endTimeLimit && $dayCount < $maxDays) {
+            $dayCount++;
+            // Set available hours
             $availableStart = $currentTime->setTime(6, 0, 0);
             $availableEnd = $currentTime->setTime(22, 0, 0);
 
             while ($availableStart->getTimestamp() + $remainingDuration * 60 <= $availableEnd->getTimestamp() && $availableStart < $endTimeLimit) {
                 if ($this->hasConflict($availableStart, $remainingDuration, $scheduledParts)) {
                     $conflictEnd = $this->getConflictEndTime($availableStart);
-                    $actualStartTs = max($availableStart->getTimestamp() + 900, $conflictEnd->getTimestamp());
+                    $actualStartTs = max($availableStart->getTimestamp() + 900, $conflictEnd->getTimestamp()); // 15 min buffer
                     $availableStart = $availableStart->setTimestamp($actualStartTs);
                     continue;
                 }
@@ -122,7 +151,7 @@ class ScheduleService {
                 $taskPart->end_datetime = $availableStart->modify("+$remainingDuration minutes");
                 $taskPart->parent_task_id = $task->id;
 
-                Log::debug("Scheduling task part ID {$task->id} from {$taskPart->start_datetime->format('Y-m-d H:i')} to {$taskPart->end_datetime->format('Y-m-d H:i')}");
+                AppLogger::debug("Scheduling task part ID {$task->id} from {$taskPart->start_datetime->format('Y-m-d H:i')} to {$taskPart->end_datetime->format('Y-m-d H:i')}");
 
                 $scheduledParts[] = $taskPart;
                 $scheduledTaskParts[] = ['start' => $taskPart->start_datetime, 'end' => $taskPart->end_datetime];
@@ -133,13 +162,12 @@ class ScheduleService {
 
                 if ($remainingDuration <= 0) break 2; // Fully scheduled
             }
-
             // Move to next day
             $currentTime = $availableStart->modify('+1 day');
         }
 
         if ($remainingDuration > 0) {
-            Log::warning("Could not fully schedule Task ID {$task->id}. Remaining duration: {$remainingDuration} minutes.");
+            AppLogger::warning("Could not fully schedule Task ID {$task->id}. Remaining duration: {$remainingDuration} minutes.");
         }
 
         // Order task parts sequentially
@@ -191,7 +219,7 @@ class ScheduleService {
                 $dtObj = new DateTimeImmutable($dt);
                 return $dtObj->setTime($dtObj->format('H'), $dtObj->format('i'), 0);
             } catch (Exception $e) {
-                Log::error("Failed to convert {$dt} to DateTimeImmutable {$e->getMessage()}");
+                AppLogger::error("Failed to convert {$dt} to DateTimeImmutable {$e->getMessage()}");
                 return null;
             }
         } else {

@@ -25,7 +25,7 @@ function format_var($var) {
  * @throws \Exception If the Log facade is not available.
  */
 function debug_log($message) {
-    Log::debug($message);
+    AppLogger::debug($message);
 }
 
 /**
