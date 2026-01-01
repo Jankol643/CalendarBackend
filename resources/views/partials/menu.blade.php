@@ -1,4 +1,10 @@
-<?php $menuArray = App\Http\Controllers\Helpers\MenuHelper::generateNestedMenuArray(); ?>
+<?php
+
+declare(strict_types = 1);
+
+use App\Http\Controllers\Helpers\MenuHelper;
+
+$menuArray = MenuHelper::generateNestedMenuArray(); ?>
 <nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm">
     <div class="container">
         <a class="navbar-brand" href="{{ url('/') }}">

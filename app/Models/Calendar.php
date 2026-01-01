@@ -1,16 +1,18 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class Calendar extends Model {
+final class Calendar extends Model {
 
     protected $fillable = [
         'user_id',
         'title',
         'description',
-        'color'
+        'color',
     ];
 
     public function user() {
@@ -24,4 +26,5 @@ class Calendar extends Model {
     public function tasks() {
         return $this->hasMany(Task::class);
     }
+
 }

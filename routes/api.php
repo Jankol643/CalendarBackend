@@ -1,15 +1,16 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+declare(strict_types = 1);
+
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\CsvImportController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\TaskController;
-use App\Http\Controllers\CalendarController;
-use App\Http\Controllers\AuthController;
-use App\Http\Controllers\CsvImportController;
 use App\Http\Controllers\TimezoneController;
-use App\Services\CsvImportService;
 use App\Services\ExportService;
 use App\Services\ScheduleService;
+use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
@@ -22,7 +23,7 @@ use App\Services\ScheduleService;
 |
 */
 
-Route::middleware(['api', 'auth.jwt'])->group(function () {
+Route::middleware(['api', 'auth.jwt'])->group(static function (): void {
     Route::get('/calendars', [CalendarController::class, 'index']);
     Route::post('/calendars', [CalendarController::class, 'store']);
     Route::get('/calendars/{id}', [CalendarController::class, 'show']);
@@ -30,7 +31,7 @@ Route::middleware(['api', 'auth.jwt'])->group(function () {
     Route::delete('/calendars/{id}', [CalendarController::class, 'destroy']);
 
     // Events routes
-    Route::prefix('/calendars/{calendarId}/events')->group(function () {
+    Route::prefix('/calendars/{calendarId}/events')->group(static function (): void {
         Route::get('/', [EventController::class, 'index']);
         Route::post('/', [EventController::class, 'store']);
         Route::get('/{id}', [EventController::class, 'show']);
@@ -39,7 +40,7 @@ Route::middleware(['api', 'auth.jwt'])->group(function () {
     });
 
     // Tasks routes
-    Route::prefix('/calendars/{calendarId}/tasks')->group(function () {
+    Route::prefix('/calendars/{calendarId}/tasks')->group(static function (): void {
         Route::get('/', [TaskController::class, 'index']);
         Route::post('/', [TaskController::class, 'store']);
         Route::get('/{id}', [TaskController::class, 'show']);
@@ -53,7 +54,7 @@ Route::middleware(['api', 'auth.jwt'])->group(function () {
 });
 
 // Authentication routes
-Route::group(['prefix' => 'auth'], function () {
+Route::group(['prefix' => 'auth'], static function (): void {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/register', [AuthController::class, 'register']);
@@ -61,6 +62,4 @@ Route::group(['prefix' => 'auth'], function () {
 });
 
 Route::get('/timezones', [TimezoneController::class, 'getTimezones']);
-Route::options('/api/CSVInput', function () {
-    return response()->json(['status' => 'OK']);
-});
+Route::options('/api/CSVInput', static fn () => response()->json(['status' => 'OK']));

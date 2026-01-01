@@ -1,15 +1,13 @@
 <?php
 
-namespace App\Models;
+declare(strict_types = 1);
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+namespace App\Models;
 
 /**
  * Class RecurringEvent
  *
  * @package App\Models
- *
  * @property int $id
  * @property string $title
  * @property string $description
@@ -19,7 +17,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property bool $all_day
  * @property int $user_id
  */
-class RecurringEvent extends Event {
+final class RecurringEvent extends Event {
+
     protected $fillable = [
         'id',
         'title',
@@ -27,10 +26,11 @@ class RecurringEvent extends Event {
         'frequency',
         'start_date',
         'end_date',
-        'all_day'
+        'all_day',
     ];
 
     protected $guarded = [
-        'location'
+        'location',
     ];
+
 }

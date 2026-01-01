@@ -1,41 +1,46 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Category;
+use Illuminate\Database\Seeder;
 
-class CategorySeeder extends Seeder {
-    public function run() {
+final class CategorySeeder extends Seeder {
+
+    public function run(): void {
         // Define the categories and subcategories
         $categories = [
-            'Military' => ['Equipment'],
-            'Programming' => ['Todo', 'Task'],
-            'Digital' => ['Todo'],
             'Airplane' => ['Crash'],
-            'Environment' => ['Water'],
-            'Journalism' => [],
             'Child' => [],
-            'Electricity' => ['Tools'],
-            'Welding' => [],
-            'Occupational Safety' => ['Hands'],
-            'Food' => ['Sweets'],
-            'Tools' => ['Woodworking'],
-            'Small Animals' => ['Food'],
-            'Pets' => ['Dogs'],
-            'Hobby' => ['Climbing', 'Model Building'],
-            'Physics' => ['Falling Speed', 'Energy Demand'],
             'Computer' => ['Configuration'],
-            'Shopping' => ['Smoke Detectors', 'Tools'],
-            'Safety' => ['Self-Defense'],
+            'Digital' => ['Todo'],
+            'Electricity' => ['Tools'],
+            'Environment' => ['Water'],
+            'Food' => ['Sweets'],
+            'Hobby' => ['Climbing', 'Model Building'],
+            'Journalism' => [],
             'Learning' => ['General'],
+            'Military' => ['Equipment'],
+            'Occupational Safety' => ['Hands'],
+            'Pets' => ['Dogs'],
+            'Physics' => ['Falling Speed', 'Energy Demand'],
+            'Programming' => ['Todo', 'Task'],
+            'Safety' => ['Self-Defense'],
+            'Shopping' => ['Smoke Detectors', 'Tools'],
+            'Small Animals' => ['Food'],
+            'Tools' => ['Woodworking'],
+            'Welding' => [],
         ];
 
         foreach ($categories as $categoryName => $subcategories) {
             $category = Category::create(['name' => $categoryName]);
+
             foreach ($subcategories as $subcategoryName) {
                 Category::create(['name' => $subcategoryName, 'parent_id' => $category->id]);
             }
         }
     }
+
 }

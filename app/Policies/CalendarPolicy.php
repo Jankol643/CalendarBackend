@@ -1,14 +1,20 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace App\Policies;
 
 use App\Models\Calendar;
 use App\Models\User;
-use Illuminate\Auth\Access\HandlesAuthorization; // Import HandlesAuthorization
+// Import HandlesAuthorization
+use Illuminate\Auth\Access\HandlesAuthorization;
 
-class CalendarPolicy
+final class CalendarPolicy
 {
-    use HandlesAuthorization; // Use the trait
+
+    use HandlesAuthorization;
+
+ // Use the trait
 
     /**
      * Determine if the given calendar can be viewed by the user.
@@ -57,4 +63,5 @@ class CalendarPolicy
     // TODO: Consider using middleware to protect routes based on these policies.
     // TODO: Ensure proper error handling and logging for authorization failures.
     // TODO: Add unit tests to cover different user roles and permissions scenarios.
+
 }

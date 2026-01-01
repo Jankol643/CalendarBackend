@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 
-class CsvImportService {
+class CsvProcessor {
     private CsvValidator $validator;
     private int $maxLines;
     private int $batchSize;
@@ -29,14 +29,15 @@ class CsvImportService {
 
         try {
             $csvSettings = $this->detectCsvSettings($fullPath);
-            return $this->processCsvFile($fullPath, $csvSettings, $uploadId);
+            $result = $this->processCsvFile($fullPath, $csvSettings, $uploadId);
+            return $this->buildResult($result['eventIds'], $result['taskIds'], $result['summary']);
         } finally {
             Storage::delete($path);
         }
     }
 
     private function processCsvFile(string $filePath, array $csvSettings, ?string $uploadId): array {
-        $handle = fopen($filePath, 'r');
+        $handle = fopen($filePath, 'r+');
         if (!$handle) {
             throw new \RuntimeException("Cannot open CSV file: {$filePath}");
         }
@@ -134,18 +135,37 @@ class CsvImportService {
     }
 
     private function removeBomFromFile($handle): void {
+        AppLogger::info('Starting BOM removal process.');
         rewind($handle);
-        $firstLine = fgets($handle);
-        if ($firstLine === false) return;
+        $content = stream_get_contents($handle);
+        if ($content === false) {
+            AppLogger::warning('Failed to read file contents during BOM removal.');
+            return;
+        }
 
-        if (substr($firstLine, 0, 3) === "\xEF\xBB\xBF") {
-            $firstLine = substr($firstLine, 3);
-            $rest = stream_get_contents($handle);
-            ftruncate($handle, 0);
+        if (substr($content, 0, 3) === "\xEF\xBB\xBF") {
+            $content = substr($content, 3);
+            AppLogger::info('BOM detected, removing BOM from file.');
+            // Rewind to beginning
             rewind($handle);
-            fwrite($handle, $firstLine . $rest);
-            rewind($handle);
+            // Check if stream is writable
+            if (!stream_get_meta_data($handle)['mode'] || strpos(stream_get_meta_data($handle)['mode'], 'w') === false && strpos(stream_get_meta_data($handle)['mode'], '+') === false) {
+                AppLogger::error('Stream is not writable.');
+                return;
+            }
+            // Truncate the file
+            if (ftruncate($handle, 0)) {
+                if (fwrite($handle, $content) !== false) {
+                    fflush($handle);
+                    AppLogger::info('BOM removed successfully.');
+                } else {
+                    AppLogger::error('Failed to write content after truncating.');
+                }
+            } else {
+                AppLogger::error('Failed to truncate file during BOM removal.');
+            }
         } else {
+            AppLogger::info('No BOM detected in the first line.');
             rewind($handle);
         }
     }
@@ -181,26 +201,19 @@ class CsvImportService {
         if (empty($filteredData)) {
             return null;
         }
+        AppLogger::debug('UploadId: ' . $uploadId);
 
         $processedData = $this->applyProcessingPipeline($filteredData, $modelClass, $uploadId);
         return $processedData;
     }
 
-    private function applyProcessingPipeline(array $data, string $modelClass, ?string $uploadId): array {
-        $pipeline = [
-            'sanitizeRowData',
-            'preventCsvInjection',
-            'convertDataTypes',
-            'limitFieldSizes',
-            'addUploadMetadata'
-        ];
+    private function applyProcessingPipeline(array $data, string $uploadId): array {
+        $data = $this->sanitizeRowData($data);
+        $data = $this->convertDataTypes($data);
+        $data = $this->limitFieldSizes($data);
+        $data['uploaded'] = $uploadId;
 
-        $processedData = $data;
-        foreach ($pipeline as $method) {
-            $processedData = $this->$method($processedData, $modelClass, $uploadId);
-        }
-
-        return $processedData;
+        return $data;
     }
 
     private function sanitizeRowData(array $data): array {
@@ -216,15 +229,6 @@ class CsvImportService {
 
         Log::debug('Sanitized row: ', $sanitized);
         return $sanitized;
-    }
-
-    private function preventCsvInjection(array $data): array {
-        foreach ($data as $key => &$value) {
-            if (is_string($value) && preg_match('/^[=\+\-@]/', $value)) {
-                $value = "'" . $value;
-            }
-        }
-        return $data;
     }
 
     private function convertDataTypes(array $data): array {
@@ -293,11 +297,6 @@ class CsvImportService {
             $limited[$key] = $value;
         }
         return $limited;
-    }
-
-    private function addUploadMetadata(array $data, ?string $uploadId): array {
-        $data['uploaded'] = $uploadId ?? true;
-        return $data;
     }
 
     private function detectCsvSettings(string $filePath): array {

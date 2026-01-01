@@ -8,15 +8,15 @@
     ],
     "license": "MIT",
     "require": {
-        "php": "^8.0.2",
+        "php": "^8.2",
         "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
         "guzzlehttp/guzzle": "^7.2",
-        "laravel/framework": "^9.19",
-        "laravel/sanctum": "^3.0",
-        "laravel/tinker": "^2.7",
+        "laravel/framework": "^12.0",
+        "laravel/sanctum": "^4.0",
+        "laravel/tinker": "^2.9",
         "laravel/ui": "^4.5",
         "league/csv": "^9.27",
-        "php-open-source-saver/jwt-auth": "^2.2",
+        "php-open-source-saver/jwt-auth": "^2.8.3",
         "rarst/phpcs-cognitive-complexity": "^0.2.0",
         "squizlabs/php_codesniffer": "^3.10"
     },
@@ -25,9 +25,10 @@
         "laravel/pint": "^1.0",
         "laravel/sail": "^1.0.1",
         "mockery/mockery": "^1.4.4",
-        "nunomaduro/collision": "^6.1",
+        "php-parallel-lint/php-parallel-lint": "*",
         "phpunit/phpunit": "^9.5.10",
-        "spatie/laravel-ignition": "^1.0"
+        "slevomat/coding-standard": "^8.22",
+        "spatie/laravel-ignition": "^2.0"
     },
     "autoload": {
         "psr-4": {
@@ -46,7 +47,7 @@
     },
     "scripts": {
         "post-autoload-dump": [
-            "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
+            "Illuminate\\Foundation\\ComposerScripts::postAutoload-dump",
             "@php artisan package:discover --ansi"
         ],
         "post-update-cmd": [
@@ -58,8 +59,12 @@
         "post-create-project-cmd": [
             "@php artisan key:generate --ansi"
         ],
-        "check": "/vendor/bin phpcs --standard=custom_ruleset.xml -p $@ .",
-        "cog-complexity": ".\\/vendor/bin/phpcs --standard=CognitiveComplexity"
+        "check": "phpcs -d memory_limit=-1 --standard=custom_ruleset.xml -p .",
+        "cog-complexity": "./vendor/bin/phpcs --standard=CognitiveComplexity",
+        "fix": [
+            "Composer\\Config::disableProcessTimeout",
+            "phpcbf -d memory_limit=-1 --standard=custom_ruleset.xml -p ."
+        ]
     },
     "extra": {
         "laravel": {

@@ -13,7 +13,11 @@
                         @foreach($calendars as $calendar)
                         <label class="checkbox-btn">
                             <input type="checkbox" class="calendar-checkbox" data-id="{{ $calendar->id }}" checked>
-                            <span class="color-circle" style="<?php echo 'background-color: ' . $calendar->color . ';'; ?>"></span> {{ $calendar->title }}
+                            <span class="color-circle" style="<?php
+
+declare(strict_types = 1);
+
+'background-color: ' . $calendar->color . ';'; ?>"></span> {{ $calendar->title }}
                         </label>
                         @endforeach
                     </div>

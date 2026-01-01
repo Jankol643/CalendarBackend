@@ -1,25 +1,24 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\RateLimiter as FacadesRateLimiter;
 use Illuminate\Support\Facades\Request;
+use Illuminate\Support\ServiceProvider;
 
-class AppServiceProvider extends ServiceProvider {
+final class AppServiceProvider extends ServiceProvider {
+
     /**
      * Register any application services.
-     *
-     * @return void
      */
-    public function register() {
-        //
+    public function register(): void {
     }
 
-    public function boot() {
-        FacadesRateLimiter::for('login', function (Request $request) {
-            return Limit::perMinute(5)->by($request->ip()); // Limit to 5 attempts per minute per IP
-        });
+    public function boot(): void {
+        FacadesRateLimiter::for('login', static fn (Request $request) => Limit::perMinute(5)->by($request->ip()));
     }
+
 }

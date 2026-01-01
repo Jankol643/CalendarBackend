@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\ProcessCsvImportJob;
+use App\Services\AppLogger;
 use App\Services\CsvImportService;
 use App\Services\CsvValidator;
 use Illuminate\Http\Request;
@@ -37,14 +38,15 @@ class CsvImportController extends Controller {
             return response()->json(['error' => $e->getMessage()], 422);
         }
 
-        $uploadId = uniqid('csv_import_');
+        define('UPLOADID', $request->headers->get('X-Upload-Id'));
+        AppLogger::debug('UploadId: ' . UPLOADID);
 
         $csvImportService = app(CsvImportService::class);
-        $result = $csvImportService->import($file, $uploadId);
+        $result = $csvImportService->import($file, UPLOADID);
 
         return response()->json([
             'message' => 'CSV file processed successfully',
-            'upload_id' => $uploadId,
+            'upload_id' => UPLOADID,
             'data' => $result,
             'status' => 'completed'
         ]);
