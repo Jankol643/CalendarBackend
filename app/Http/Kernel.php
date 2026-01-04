@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types = 1);
+declare(strict_types=1);
 
 namespace App\Http;
 
@@ -37,7 +37,7 @@ final class Kernel extends HttpKernel {
      *
      * @var array<int, class-string|string>
      */
-    protected array $middleware = [
+    protected $middleware = [
         // \App\Http\Middleware\TrustHosts::class,
         TrustProxies::class,
         HandleCors::class,
@@ -50,9 +50,8 @@ final class Kernel extends HttpKernel {
     /**
      * The application's route middleware groups.
      *
-     * @var array<string, array<int, class-string|string>>
      */
-    protected array $middlewareGroups = [
+    protected $middlewareGroups = [
 
         'api' => [
             // \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
@@ -74,9 +73,8 @@ final class Kernel extends HttpKernel {
      *
      * These middleware may be assigned to groups or used individually.
      *
-     * @var array<string, class-string|string>
      */
-    protected array $routeMiddleware = [
+    protected $routeMiddleware = [
         'auth' => Authenticate::class,
         'auth.basic' => AuthenticateWithBasicAuth::class,
         'auth.jwt' => \PHPOpenSourceSaver\JWTAuth\Http\Middleware\Authenticate::class,
@@ -89,5 +87,4 @@ final class Kernel extends HttpKernel {
         'throttle' => ThrottleRequests::class,
         'verified' => EnsureEmailIsVerified::class,
     ];
-
 }

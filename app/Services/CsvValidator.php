@@ -119,14 +119,12 @@ class CsvValidator {
         try {
             $modelInstance = new $modelClass();
 
-            $rules = method_exists($modelInstance, 'getValidationRules')
-                ? $modelInstance->getValidationRules()
-                : $this->getDefaultValidationRules($data);
+            $rules = $modelInstance->getValidationRules();
 
             $validator = Validator::make($data, $rules);
             return !$validator->fails();
         } catch (\Exception $e) {
-            // Log or handle as needed
+            AppLogger::error('Validation failed with error' . $e);
             return false;
         }
     }
@@ -139,11 +137,6 @@ class CsvValidator {
             $requiredFields = [];
 
             foreach ($rules as $field => $rule) {
-                // Skip system-generated fields
-                if (in_array($field, ['uploaded', 'created_at', 'updated_at'])) {
-                    continue;
-                }
-
                 // Check if field is required
                 $isRequired = false;
                 if (is_string($rule)) {
@@ -163,13 +156,5 @@ class CsvValidator {
         // Fallback to fillable fields (excluding system fields)
         $fillable = array_diff($modelInstance->getFillable(), ['uploaded', 'created_at', 'updated_at']);
         return $fillable; // Keep original case
-    }
-
-    private function getDefaultValidationRules(array $data): array {
-        $rules = [];
-        foreach ($data as $key => $value) {
-            $rules[$key] = 'nullable';
-        }
-        return $rules;
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types = 1);
+declare(strict_types=1);
 
 namespace App\Providers;
 
@@ -13,9 +13,8 @@ final class EventServiceProvider extends ServiceProvider {
     /**
      * The event to listener mappings for the application.
      *
-     * @var array<class-string, array<int, class-string>>
      */
-    protected array $listen = [
+    protected $listen = [
         Registered::class => [
             SendEmailVerificationNotification::class,
         ],
@@ -33,5 +32,4 @@ final class EventServiceProvider extends ServiceProvider {
     public function shouldDiscoverEvents(): bool {
         return false;
     }
-
 }

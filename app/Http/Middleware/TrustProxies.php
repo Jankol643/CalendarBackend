@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types = 1);
+declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
@@ -14,16 +14,15 @@ final class TrustProxies extends Middleware {
      *
      * @var array<int, string>|string|null
      */
-    protected array|string|null $proxies = null;
+    protected $proxies = null;
 
     /**
      * The headers that should be used to detect proxies.
      */
-    protected int $headers =
+    protected $headers =
     Request::HEADER_X_FORWARDED_FOR |
         Request::HEADER_X_FORWARDED_HOST |
         Request::HEADER_X_FORWARDED_PORT |
         Request::HEADER_X_FORWARDED_PROTO |
         Request::HEADER_X_FORWARDED_AWS_ELB;
-
 }

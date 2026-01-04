@@ -74,11 +74,6 @@ class CsvProcessor {
                 continue;
             }
 
-            if (!$this->validateColumnCount($row, $headers)) {
-                $summary['failed_rows']++;
-                continue;
-            }
-
             $rowData = array_combine($headers, $row);
             $processedRow = $this->processRow($rowData, $fillableFields, $modelClass, $uploadId);
 
@@ -123,17 +118,6 @@ class CsvProcessor {
         ]);
     }
 
-    private function validateColumnCount(array $row, array $headers): bool {
-        if (count($row) !== count($headers)) {
-            Log::warning('Row skipped due to column mismatch', [
-                'expected' => count($headers),
-                'actual' => count($row),
-            ]);
-            return false;
-        }
-        return true;
-    }
-
     private function removeBomFromFile($handle): void {
         AppLogger::info('Starting BOM removal process.');
         rewind($handle);
@@ -172,24 +156,39 @@ class CsvProcessor {
 
     private function readCsvHeaders($handle, array $csvSettings): array {
         rewind($handle);
+
+        // Read and validate first line exists
         $firstLine = fgets($handle);
         if ($firstLine === false) {
             throw new \RuntimeException('CSV file is empty');
         }
 
-        if (substr($firstLine, 0, 3) === "\xEF\xBB\xBF") {
-            $firstLine = substr($firstLine, 3);
-        }
+        // Remove trailing newline/carriage return for encoding check
+        $firstLineTrimmed = rtrim($firstLine, "\r\n");
 
-        if (!mb_check_encoding($firstLine, 'UTF-8')) {
+        // Check encoding (excluding newline characters)
+        if (!mb_check_encoding($firstLineTrimmed, 'UTF-8')) {
             throw new \RuntimeException('CSV encoding is not UTF-8');
         }
 
         rewind($handle);
-        $headers = fgetcsv($handle, 0, $csvSettings['delimiter'], $csvSettings['enclosure'], $csvSettings['escape']);
 
-        if (empty($headers) || empty(array_filter($headers))) {
-            throw new \RuntimeException('CSV header is empty or invalid');
+        // Read headers using fgetcsv with proper CSV parsing
+        $headers = fgetcsv(
+            $handle,
+            0, // 0 is better than null for unlimited line length
+            $csvSettings['delimiter'],
+            $csvSettings['enclosure'],
+            $csvSettings['escape']
+        );
+
+        // Validate headers
+        if ($headers === false || $headers === null) {
+            throw new \RuntimeException('Failed to read CSV headers');
+        }
+
+        if (empty($headers) || empty(array_filter($headers, 'strlen'))) {
+            throw new \RuntimeException('CSV header is empty or contains only whitespace');
         }
 
         return $headers;
@@ -241,6 +240,9 @@ class CsvProcessor {
             }
             if (in_array($key, ['start_datetime', 'end_datetime', 'due_date'])) {
                 $value = $this->parseDate($value);
+            }
+            if (in_array(strtolower($value), ['null'])) {
+                $value = null;
             }
             $converted[$key] = $value;
         }
@@ -345,6 +347,7 @@ class CsvProcessor {
 
         DB::beginTransaction();
         try {
+            //TODO: look for upload id in the table instead
             $modelClass::insert($data);
             $ids = DB::table((new $modelClass())->getTable())
                 ->orderBy('id', 'desc')

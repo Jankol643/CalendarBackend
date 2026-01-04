@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types = 1);
+declare(strict_types=1);
 
 namespace App\Providers;
 
@@ -15,9 +15,8 @@ final class AuthServiceProvider extends ServiceProvider {
     /**
      * The model to policy mappings for the application.
      *
-     * @var array<class-string, class-string>
      */
-    protected array $policies = [
+    protected $policies = [
         Calendar::class => CalendarPolicy::class,
     ];
 
@@ -27,5 +26,4 @@ final class AuthServiceProvider extends ServiceProvider {
     public function boot(): void {
         $this->registerPolicies();
     }
-
 }

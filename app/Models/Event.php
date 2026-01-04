@@ -63,4 +63,14 @@ class Event extends Model {
             return $castType === 'datetime';
         }, ARRAY_FILTER_USE_BOTH));
     }
+
+    public static function getValidationRules(): array {
+        $rules = [
+            'title' => 'required',
+            'start_datetime' => 'required',
+            'end_datetime' => 'required',
+            'calendar_id' => 'required'
+        ];
+        return $rules;
+    }
 }

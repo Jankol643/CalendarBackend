@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types = 1);
+declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -18,7 +18,7 @@ final class CreateTasksTable extends Migration {
             $table->dateTime('due_date')->nullable();
             // Duration in minutes or preferred unit
             $table->integer('duration')->nullable();
-            // Priorityrity
+            // Priority
             $table->integer('priority')->nullable();
             // Scheduled start time
             $table->timestamp('start_datetime')->nullable();
@@ -33,5 +33,4 @@ final class CreateTasksTable extends Migration {
     public function down(): void {
         Schema::dropIfExists('tasks');
     }
-
 }

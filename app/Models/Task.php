@@ -128,4 +128,15 @@ class Task extends Model {
             ARRAY_FILTER_USE_KEY
         ));
     }
+
+    public static function getValidationRules(): array {
+        $rules = [
+            'name' => 'required',
+            'due_date' => 'required', //TODO: also allow tasks without due date
+            'duration' => 'required',
+            'priority' => 'required',
+            'calendar_id' => 'required'
+        ];
+        return $rules;
+    }
 }

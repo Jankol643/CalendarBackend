@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types = 1);
+declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
@@ -13,7 +13,5 @@ final class PreventRequestsDuringMaintenance extends Middleware {
      *
      * @var array<int, string>
      */
-    protected array $except = [
-    ];
-
+    protected $except = [];
 }
