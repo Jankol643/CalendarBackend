@@ -75,7 +75,7 @@ class CsvProcessor {
             }
 
             $rowData = array_combine($headers, $row);
-            $processedRow = $this->processRow($rowData, $fillableFields, $modelClass, $uploadId);
+            $processedRow = $this->processRow($rowData, $fillableFields, $uploadId);
 
             if ($processedRow) {
                 $batchData[] = $processedRow;
@@ -194,15 +194,15 @@ class CsvProcessor {
         return $headers;
     }
 
-    private function processRow(array $rowData, array $fillableFields, string $modelClass, ?string $uploadId): ?array {
-        Log::debug('Row data: ', $rowData);
+    private function processRow(array $rowData, array $fillableFields, ?string $uploadId): ?array {
         $filteredData = array_intersect_key($rowData, array_flip($fillableFields));
         if (empty($filteredData)) {
             return null;
         }
-        AppLogger::debug('UploadId: ' . $uploadId);
 
-        $processedData = $this->applyProcessingPipeline($filteredData, $modelClass, $uploadId);
+        $processedData = $this->applyProcessingPipeline($filteredData, $uploadId);
+        AppLogger::debug('Processed data:');
+        AppLogger::debug($processedData);
         return $processedData;
     }
 
@@ -226,7 +226,6 @@ class CsvProcessor {
             $sanitized[$key] = $value;
         }
 
-        Log::debug('Sanitized row: ', $sanitized);
         return $sanitized;
     }
 
@@ -345,15 +344,22 @@ class CsvProcessor {
             return [];
         }
 
+        $ids = [];
         DB::beginTransaction();
         try {
-            //TODO: look for upload id in the table instead
-            $modelClass::insert($data);
-            $ids = DB::table((new $modelClass())->getTable())
-                ->orderBy('id', 'desc')
-                ->limit(count($data))
-                ->pluck('id')
-                ->toArray();
+            foreach ($data as $rowData) {
+                // Debug logging
+                Log::debug('Inserting row', [
+                    'model_class' => $modelClass,
+                    'row_data' => $rowData,
+                    'has_uploaded' => isset($rowData['uploaded']),
+                    'uploaded_value' => $rowData['uploaded'] ?? null
+                ]);
+                $model = new $modelClass();
+                $model->fill($rowData);
+                $model->save();
+                $ids[] = $model->getKey();
+            }
             DB::commit();
             return $ids;
         } catch (\Exception $e) {
