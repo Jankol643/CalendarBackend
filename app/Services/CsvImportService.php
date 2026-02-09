@@ -16,7 +16,7 @@ class CsvImportService {
     ) {
     }
 
-    public function import(UploadedFile $file, ?string $uploadId = null): JsonResponse {
+    public function import(UploadedFile $file, bool $adjustDates, ?string $uploadId = null): JsonResponse {
         try {
             // Validate upload ID first
             if ($uploadId && !$this->csvValidator->isValidUploadId($uploadId)) {
@@ -27,7 +27,7 @@ class CsvImportService {
             $this->csvValidator->validateUploadedFile($file);
 
             // Process file
-            $result = $this->csvProcessor->process($file, $uploadId);
+            $result = $this->csvProcessor->process($file, $adjustDates, $uploadId);
 
             return response()->json([
                 'events' => $result['events'],

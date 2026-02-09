@@ -42,13 +42,9 @@ class CsvImportController extends Controller {
         AppLogger::debug('UploadId: ' . UPLOADID);
 
         $csvImportService = app(CsvImportService::class);
-        $result = $csvImportService->import($file, UPLOADID);
+        $adjustDates = $request->boolean('adjustToCurrentDate', false);
+        $result = $csvImportService->import($file, $adjustDates, UPLOADID);
 
-        return response()->json([
-            'message' => 'CSV file processed successfully',
-            'upload_id' => UPLOADID,
-            'data' => $result,
-            'status' => 'completed'
-        ]);
+        return $result;
     }
 }

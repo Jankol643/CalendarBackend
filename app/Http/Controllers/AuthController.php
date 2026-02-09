@@ -12,167 +12,298 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 use Symfony\Component\HttpKernel\Exception\HttpException;
-use Illuminate\Auth\Events\Registered; // Import Registered event
-use Illuminate\Support\Facades\URL;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
-use Illuminate\Cache\RateLimiter;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class AuthController extends Controller {
+    // Cache TTLs
+    private const USER_CACHE_TTL = 300; // 5 minutes
+    private const RATE_LIMIT_TTL = 60; // 1 minute
+
+    // Max login attempts
+    private const MAX_LOGIN_ATTEMPTS = 10;
+
+    // Middleware to apply rate limiting based on environment
     public function __construct() {
         $this->middleware('auth:api', ['except' => ['login', 'register']]);
-        // Maximum of 10 requests within a 1-minute window
-        $this->middleware('throttle:10,1')->only('login', 'register');
+
+        if ($this->isLocalEnvironment()) {
+            AppLogger::info('Running in local environment - relaxed rate limits');
+            $this->middleware('throttle:30,1')->only(['login', 'register']);
+        } else {
+            $this->middleware('throttle:' . self::MAX_LOGIN_ATTEMPTS . ',' . self::RATE_LIMIT_TTL)->only('login');
+            $this->middleware('throttle:10,1')->only('register');
+        }
     }
 
-    private function logPerformance($methodName, $startTime, $endTime) {
-        $executionTime = ($endTime - $startTime) * 1000; // Convert to milliseconds
-        AppLogger::info("Performance: Method '$methodName' executed in {$executionTime} ms.");
+    /**
+     * Determine if current environment is local or testing
+     */
+    private function isLocalEnvironment(): bool {
+        return in_array(app()->environment(), ['local', 'testing']);
     }
 
+    /**
+     * Log performance metrics
+     */
+    private function logPerformance(string $methodName, float $startTime, float $endTime): void {
+        $executionTimeMs = ($endTime - $startTime) * 1000;
+        $thresholdMs = $this->isLocalEnvironment() ? 2000 : 1000;
+
+        if ($executionTimeMs > $thresholdMs) {
+            AppLogger::warning("Performance Warning: {$methodName} took {$executionTimeMs} ms");
+        } else {
+            AppLogger::debug("Performance: {$methodName} executed in {$executionTimeMs} ms");
+        }
+    }
+
+    /**
+     * Register a new user
+     */
     public function register(Request $request): JsonResponse {
         $startTime = microtime(true);
+        AppLogger::info('Registration started', ['ip' => $request->ip()]);
 
-        // Sanitize email and password inputs explicitly
-        $email = filter_var($request->input('email'), FILTER_SANITIZE_EMAIL);
-        $password = $request->input('password');
-
-        // Validate inputs
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => [
+        $passwordRules = $this->isLocalEnvironment()
+            ? ['required', 'string', 'min:6']
+            : [
                 'required',
                 'string',
                 'min:8',
-                // password complexity validation rules
-                // TODO: Add messages to frontend so users know the rules before choosing a password
-                'regex:/[A-Z]/', // at least one uppercase
-                'regex:/[a-z]/', // at least one lowercase
-                'regex:/[0-9]/', // at least one number
-                'regex:/[^A-Za-z0-9]/', // at least one special char
-            ],
+                'regex:/[A-Z]/',
+                'regex:/[a-z]/',
+                'regex:/[0-9]/',
+                'regex:/[^A-Za-z0-9]/',
+            ];
+
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email|max:255|unique:users',
+            'password' => $passwordRules,
             'password_confirmation' => 'required|same:password',
         ]);
 
         if ($validator->fails()) {
-            AppLogger::warning('Registration validation errors', $validator->errors()->all());
+            AppLogger::warning('Registration validation failed', [
+                'errors' => $validator->errors()->all(),
+                'ip' => $request->ip(),
+                'email' => $request->input('email')
+            ]);
             return response()->json([
                 'isSuccess' => false,
                 'error_message' => $validator->errors()
             ], 422);
         }
 
+        $email = filter_var($request->input('email'), FILTER_SANITIZE_EMAIL);
+        $password = $request->input('password');
+
         try {
+            DB::beginTransaction();
+
             $user = User::create([
                 'email' => $email,
                 'password' => Hash::make($password),
-                'activation_code' => Str::random(60), // Generate activation code
-                'activation_expiry' => now()->addMinutes(60), // Set expiry time
+                'activation_code' => Str::random(60),
+                'activation_expiry' => now()->addMinutes(60),
             ]);
 
-            // Generate email verification token and send email
-            $verificationUrl = URL::temporarySignedRoute(
-                'verification.verify',
-                now()->addMinutes(60),
-                ['id' => $user->id, 'hash' => sha1($user->email)]
-            );
+            if (!$this->isLocalEnvironment()) {
+                // Queue verification email
+                // Mail::to($user->email)->queue(new VerifyEmail($user));
+            } else {
+                // Auto-activate in local
+                $user->update([
+                    'is_active' => true,
+                    'email_verified_at' => now(),
+                ]);
+                AppLogger::info('Local environment: auto-activated user', ['user_id' => $user->id]);
+            }
 
-            //Mail::to($user->email)->send(new VerifyEmail($user, $verificationUrl));
+            DB::afterCommit(function () use ($user) {
+                event(new Registered($user));
+            });
 
-            event(new Registered($user)); // Dispatch the Registered event
+            DB::commit();
         } catch (\Exception $e) {
-            // Log exception details for debugging
-            AppLogger::error('User registration failed: ' . $e->getMessage());
-            return response()->json(['isSuccess' => false, 'error_message' => 'Registration failed'], 500);
+            DB::rollBack();
+            AppLogger::error('User registration failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'email' => $email,
+                'ip' => $request->ip()
+            ]);
+            return response()->json([
+                'isSuccess' => false,
+                'error_message' => $this->isLocalEnvironment()
+                    ? 'Registration failed: ' . $e->getMessage()
+                    : 'Registration failed'
+            ], 500);
         }
 
-        // Optionally generate token or send confirmation email
-        AppLogger::info('User registered successfully for email: ' . $user->email);
+        AppLogger::info('User registered successfully', [
+            'email' => $user->email,
+            'user_id' => $user->id,
+            'environment' => app()->environment()
+        ]);
 
         $endTime = microtime(true);
         $this->logPerformance('register', $startTime, $endTime);
 
-        return response()->json(['message' => 'User registered successfully. Please check your email for verification.', 'user_id' => $user->id], 201);
+        return response()->json([
+            'message' => $this->isLocalEnvironment()
+                ? 'User registered successfully. Account auto-activated for local testing.'
+                : 'User registered successfully. Please verify your email.',
+            'user_id' => $user->id,
+            'auto_activated' => $this->isLocalEnvironment()
+        ], 201);
     }
 
+    /**
+     * Login user and generate JWT token
+     */
     public function login(Request $request): JsonResponse {
         $startTime = microtime(true);
-        $this->validateLogin($request); // Validate input data before attempt
+        AppLogger::info('Login attempt started', [
+            'ip' => $request->ip(),
+            'email' => $request->input('email'),
+            'environment' => app()->environment()
+        ]);
+
+        $this->validateLogin($request);
 
         $credentials = $request->only('email', 'password');
-        $rateLimiter = app(RateLimiter::class);
-        $key = 'login_attempts:' . $request->ip();
+        $email = $credentials['email'];
+        $ip = $request->ip();
 
-        // Check if user has exceeded the rate limit
-        if ($rateLimiter->tooManyAttempts($key, 5)) {
-            // Calculate retry after time
-            $retryAfter = $rateLimiter->availableIn($key);
-            return response()->json([
-                'isSuccess' => false,
-                'message' => 'Too many login attempts. Please wait ' . $retryAfter . ' seconds before retrying.',
-                'retryAfter' => $retryAfter,
-                'availableRetries' => 0 // No retries allowed until cooldown
-            ], 429);
+        if (!$this->isLocalEnvironment()) {
+            $rateLimiterKey = 'login_attempts:' . md5($ip . '|' . $email);
+            if ($this->hasTooManyLoginAttempts($rateLimiterKey)) {
+                $retryAfter = Cache::get($rateLimiterKey . ':timer', self::RATE_LIMIT_TTL);
+                AppLogger::warning('Rate limit exceeded', ['email' => $email, 'ip' => $ip, 'retry_after' => $retryAfter]);
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'Too many login attempts. Please wait ' . $retryAfter . ' seconds.',
+                    'retryAfter' => $retryAfter,
+                    'availableRetries' => 0
+                ], 429);
+            }
         }
 
-        // Attempt login
-        if (!$token = Auth::guard('api')->attempt($credentials)) {
-            $rateLimiter->hit($key); // Increment attempted logins
+        // Check if user exists and cache result
+        $user = Cache::remember('user_exists:' . md5($email), self::USER_CACHE_TTL, function () use ($email) {
+            return User::where('email', $email)
+                ->select('id', 'email', 'password', 'is_active', 'email_verified_at')
+                ->first();
+        });
 
-            AppLogger::warning('Failed login attempt for email: ' . $credentials['email'] . ' from IP address ' . $_SERVER['REMOTE_ADDR']);
-
-            $endTime = microtime(true);
-            $this->logPerformance('login', $startTime, $endTime);
-
-            // Calculate remaining retries
-            $retryCount = 5 - $rateLimiter->attempts($key);
+        if (!$user) {
+            if (!$this->isLocalEnvironment()) {
+                $this->incrementLoginAttempts($rateLimiterKey);
+            }
+            AppLogger::warning('Login failed: user not found', ['email' => $email, 'ip' => $ip]);
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Unauthorized',
-                'availableRetries' => $retryCount
+                'availableRetries' => $this->isLocalEnvironment() ? 'unlimited' : $this->retriesLeft($rateLimiterKey)
             ], 401);
         }
 
-        $rateLimiter->clear($key); // Clear the attempts on successful login
+        if (isset($user->is_active) && !$user->is_active) {
+            AppLogger::warning('Inactive account login attempt', ['email' => $email, 'user_id' => $user->id]);
+            return response()->json(['isSuccess' => false, 'message' => 'Account is not active'], 403);
+        }
+
+        if (!$this->isLocalEnvironment() && !$user->email_verified_at) {
+            AppLogger::warning('Unverified email login attempt', ['email' => $email, 'user_id' => $user->id]);
+            return response()->json(['isSuccess' => false, 'message' => 'Please verify your email before logging in'], 403);
+        }
+
+        // Attempt JWT login
+        if (!JWTAuth::attempt($credentials)) {
+            if (!$this->isLocalEnvironment()) {
+                $this->incrementLoginAttempts($rateLimiterKey);
+            }
+            Cache::forget('user_exists:' . md5($email));
+            AppLogger::warning('Invalid credentials', ['email' => $email, 'ip' => $ip]);
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Unauthorized - Invalid credentials',
+                'availableRetries' => $this->isLocalEnvironment() ? 'unlimited' : $this->retriesLeft($rateLimiterKey)
+            ], 401);
+        }
+
+        if (!$this->isLocalEnvironment()) {
+            $this->clearLoginAttempts($rateLimiterKey);
+        }
+
+        // Cache user info
+        Cache::put('auth_user:' . $user->id, [
+            'id' => $user->id,
+            'email' => $user->email,
+        ], self::USER_CACHE_TTL);
+
+        AppLogger::info('Login successful', ['email' => $user->email, 'user_id' => $user->id]);
 
         $endTime = microtime(true);
         $this->logPerformance('login', $startTime, $endTime);
 
         return response()->json([
             'isSuccess' => true,
-            'authorisation' => ['token' => $token, 'type' => 'bearer'],
+            'authorisation' => [
+                'token' => JWTAuth::attempt($credentials),
+                'type' => 'bearer',
+                'expires_in' => JWTAuth::factory()->getTTL() * 60,
+            ],
+            'environment' => app()->environment()
         ]);
     }
 
-
-    private function validateLogin(Request $request) {
+    private function validateLogin(Request $request): void {
         $rules = [
-            'email' => 'required|string|email',
-            'password' => 'required|string',
+            'email' => 'required|email|max:255',
+            'password' => $this->isLocalEnvironment() ? 'required|string|min:6' : 'required|string|min:8'
         ];
 
         $validator = Validator::make($request->all(), $rules);
-
         if ($validator->fails()) {
-            AppLogger::warning('Login validation errors', $validator->errors()->all());
-            throw new HttpException(400, json_encode(['isSuccess' => false, 'error_message' => $validator->errors()]));
+            AppLogger::warning('Login validation errors', [
+                'errors' => $validator->errors()->all(),
+                'email' => $request->input('email'),
+                'ip' => $request->ip(),
+                'environment' => app()->environment()
+            ]);
+            throw new HttpException(400, json_encode([
+                'isSuccess' => false,
+                'error_message' => $validator->errors()
+            ]));
         }
     }
 
+    /**
+     * Get current authenticated user
+     */
     public function me(): JsonResponse {
         $startTime = microtime(true);
-        $user = auth()->user();
+        AppLogger::debug('Fetching current user');
 
+        $user = JWTAuth::user();
         if (!$user) {
+            AppLogger::warning('Unauthorized access to /me');
             throw new HttpException(401, 'Unauthorized');
         }
 
-        $userData = [
-            'id' => $user->id,
-            'email' => $user->email,
-        ];
+        $userData = Cache::remember('auth_user:' . $user->id, self::USER_CACHE_TTL, function () use ($user) {
+            return [
+                'id' => $user->id,
+                'email' => $user->email,
+                // Add more user fields here if needed
+            ];
+        });
 
-        AppLogger::info('Retrieved user data', ['user_id' => $user->id]);
+        AppLogger::info('User profile retrieved', ['user_id' => $user->id]);
 
         $endTime = microtime(true);
         $this->logPerformance('me', $startTime, $endTime);
@@ -180,63 +311,113 @@ class AuthController extends Controller {
         return response()->json($userData);
     }
 
+    /**
+     * Logout user
+     */
     public function logout(): JsonResponse {
         $startTime = microtime(true);
-        $user = auth()->user();
+        $user = JWTAuth::user();
 
         if (!$user) {
+            AppLogger::warning('Logout attempt with no authenticated user');
             return response()->json(['message' => 'No user to logout'], 400);
         }
 
         try {
-            JWTAuth::invalidate(JWTAuth::getToken());
+            Cache::forget('auth_user:' . $user->id);
+            Cache::forget('user_exists:' . md5($user->email));
+
+            $token = JWTAuth::getToken();
+            if ($token) {
+                JWTAuth::invalidate($token);
+            }
         } catch (\Exception $e) {
-            AppLogger::error('JWT invalidation failed: ' . $e->getMessage());
-            return response()->json(['message' => 'Logout failed'], 500);
+            AppLogger::warning('JWT invalidation error', ['error' => $e->getMessage()]);
         }
 
-        AppLogger::info('Logging out user: ' . $user->email);
-        Auth::logout();
+        JWTAuth::logout();
 
+        AppLogger::info('User logged out', ['user_id' => $user->id]);
         $endTime = microtime(true);
         $this->logPerformance('logout', $startTime, $endTime);
 
         return response()->json(['message' => 'Successfully logged out']);
     }
 
+    /**
+     * Refresh JWT token
+     */
     public function refresh(): JsonResponse {
         $startTime = microtime(true);
-        $token = JWTAuth::getToken();
-
-        if (!$token) {
-            return response()->json(['isSuccess' => false, 'message' => 'Token not provided'], 401);
-        }
+        AppLogger::debug('Token refresh attempt');
 
         try {
-            if (JWTAuth::hasExpired()) {
-                AppLogger::warning('Token expired, cannot refresh');
-                return response()->json(['isSuccess' => false, 'message' => 'Token expired'], 401);
-            }
-
-            $newToken = JWTAuth::refresh($token);
+            $newToken = JWTAuth::refresh();
         } catch (\Exception $e) {
-            AppLogger::error('Token refresh failed: ' . $e->getMessage());
-            return response()->json(['isSuccess' => false, 'message' => 'Token refresh failed'], 500);
+            AppLogger::error('Token refresh failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json(['isSuccess' => false, 'message' => 'Token refresh failed'], 401);
         }
 
-        $user = auth()->user();
-        if (!$user) {
-            return response()->json(['isSuccess' => false, 'message' => 'User not found'], 404);
+        $user = JWTAuth::user();
+        if ($user) {
+            Cache::put('auth_user:' . $user->id, [
+                'id' => $user->id,
+                'email' => $user->email,
+            ], self::USER_CACHE_TTL);
+            AppLogger::info('Token refreshed', ['user_id' => $user->id]);
         }
-
-        AppLogger::info('Token refreshed successfully for user ID: ' . $user->id);
 
         $endTime = microtime(true);
         $this->logPerformance('refresh', $startTime, $endTime);
 
         return response()->json([
             'isSuccess' => true,
-            'authorisation' => ['token' => $newToken, 'type' => 'bearer'],
+            'authorisation' => [
+                'token' => $newToken,
+                'type' => 'bearer',
+                'expires_in' => JWTAuth::factory()->getTTL() * 60,
+            ],
         ]);
+    }
+
+    /**
+     * Rate limiting helpers
+     */
+    private function hasTooManyLoginAttempts(string $key): bool {
+        if ($this->isLocalEnvironment()) {
+            return false;
+        }
+        return Cache::get($key, 0) >= self::MAX_LOGIN_ATTEMPTS;
+    }
+
+    private function incrementLoginAttempts(string $key): void {
+        if ($this->isLocalEnvironment()) {
+            return;
+        }
+
+        Cache::add($key, 0, self::RATE_LIMIT_TTL);
+        Cache::increment($key);
+        if (!Cache::has($key . ':timer')) {
+            Cache::put($key . ':timer', self::RATE_LIMIT_TTL, self::RATE_LIMIT_TTL);
+        }
+    }
+
+    private function retriesLeft(string $key): int {
+        if ($this->isLocalEnvironment()) {
+            return PHP_INT_MAX;
+        }
+        $attempts = Cache::get($key, 0);
+        return max(0, self::MAX_LOGIN_ATTEMPTS - $attempts);
+    }
+
+    private function clearLoginAttempts(string $key): void {
+        if ($this->isLocalEnvironment()) {
+            return;
+        }
+        Cache::forget($key);
+        Cache::forget($key . ':timer');
     }
 }

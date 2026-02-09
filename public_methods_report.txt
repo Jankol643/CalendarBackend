@@ -1,0 +1,247 @@
+============================================================
+PUBLIC METHODS ANALYSIS REPORT
+============================================================
+
+SUMMARY:
+----------------------------------------
+Execution time: 25.11 ms
+Files scanned: 50
+Files with public methods: 37
+Total public methods: 117
+Test files created: 37
+
+CREATED TEST FILES:
+----------------------------------------
+  • tests\Unit\HandlerTest.php
+  • tests\Unit\CalendarTest.php
+  • tests\Unit\CategoryTest.php
+  • tests\Unit\EventTest.php
+  • tests\Unit\LocationTest.php
+  • tests\Unit\TaskTest.php
+  • tests\Unit\UserTest.php
+  • tests\Unit\CalendarPolicyTest.php
+  • tests\Unit\AppServiceProviderTest.php
+  • tests\Unit\AuthServiceProviderTest.php
+  • tests\Unit\BroadcastServiceProviderTest.php
+  • tests\Unit\EventServiceProviderTest.php
+  • tests\Unit\RouteServiceProviderTest.php
+  • tests\Unit\AppLoggerTest.php
+  • tests\Unit\CsvImportServiceTest.php
+  • tests\Unit\CsvProcessorTest.php
+  • tests\Unit\CsvValidatorTest.php
+  • tests\Unit\DuplicateDetectionServiceTest.php
+  • tests\Unit\ExportServiceTest.php
+  • tests\Unit\FileSecurityScannerTest.php
+  • tests\Unit\RateLimitServiceTest.php
+  • tests\Unit\ScheduleServiceTest.php
+  • tests\Feature\AuthControllerTest.php
+  • tests\Feature\CalendarControllerTest.php
+  • tests\Feature\CsvImportControllerTest.php
+  • tests\Feature\EventControllerTest.php
+  • tests\Feature\HomeControllerTest.php
+  • tests\Feature\TaskControllerTest.php
+  • tests\Feature\TimezoneControllerTest.php
+  • tests\Feature\RedirectIfAuthenticatedTest.php
+  • tests\Feature\TrustHostsTest.php
+  • tests\Feature\ArrayHelperTest.php
+  • tests\Feature\colorUtilTest.php
+  • tests\Feature\DateUtilTest.php
+  • tests\Feature\MenuHelperTest.php
+  • tests\Feature\StringHelperTest.php
+  • tests\Feature\UtilTest.php
+
+DETAILED ANALYSIS:
+----------------------------------------
+
+File: app\Exceptions\Handler.php (1 methods)
+  • public register()
+
+File: app\Models\Calendar.php (3 methods)
+  • public user()
+  • public events()
+  • public tasks()
+
+File: app\Models\Category.php (3 methods)
+  • public parent()
+  • public children()
+  • public tasks()
+
+File: app\Models\Event.php (5 methods)
+  • public location()
+  • public calendar()
+  • public get_by_user()
+  • public get_all()
+  • public getDateFields()
+
+File: app\Models\Location.php (1 methods)
+  • public event()
+
+File: app\Models\Task.php (6 methods)
+  • public calendar()
+  • public categories()
+  • public parentTask()
+  • public subTasks()
+  • public createWithCategories()
+  • public getDateFields()
+
+File: app\Models\User.php (3 methods)
+  • public getJWTIdentifier()
+  • public getJWTCustomClaims()
+  • public isTokenExpired()
+
+File: app\Policies\CalendarPolicy.php (3 methods)
+  • public view()
+  • public update()
+  • public delete()
+
+File: app\Providers\AppServiceProvider.php (2 methods)
+  • public register()
+  • public boot()
+
+File: app\Providers\AuthServiceProvider.php (1 methods)
+  • public boot()
+
+File: app\Providers\BroadcastServiceProvider.php (1 methods)
+  • public boot()
+
+File: app\Providers\EventServiceProvider.php (2 methods)
+  • public boot()
+  • public shouldDiscoverEvents()
+
+File: app\Providers\RouteServiceProvider.php (1 methods)
+  • public boot()
+
+File: app\Services\AppLogger.php (5 methods)
+  • public setStackTrace()
+  • public error()
+  • public warning()
+  • public info()
+  • public debug()
+
+File: app\Services\CsvImportService.php (1 methods)
+  • public import()
+
+File: app\Services\CsvProcessor.php (1 methods)
+  • public process()
+
+File: app\Services\CsvValidator.php (5 methods)
+  • public validateUploadedFile()
+  • public validateFileName()
+  • public isValidUploadId()
+  • public validateCsvHeaders()
+  • public validateRowData()
+
+File: app\Services\DuplicateDetectionService.php (2 methods)
+  • public isDuplicateUpload()
+  • public storeFileHash()
+
+File: app\Services\ExportService.php (11 methods)
+  • public exportEntries()
+  • public exportEventsToIcs()
+  • public exportEventsToJson()
+  • public exportEventsToCsv()
+  • public exportTasksToCsv()
+  • public getFilteredEvents()
+  • public getFilteredTasks()
+  • public getTotalEvents()
+  • public getTotalTasks()
+  • public formatDateTime()
+  • public formatDate()
+
+File: app\Services\FileSecurityScanner.php (1 methods)
+  • public scanFileForMalware()
+
+File: app\Services\RateLimitService.php (2 methods)
+  • public checkRateLimit()
+  • public getRetryAfter()
+
+File: app\Services\ScheduleService.php (1 methods)
+  • public schedule()
+
+File: app\Http\Controllers\AuthController.php (5 methods)
+  • public register()
+  • public login()
+  • public me()
+  • public logout()
+  • public refresh()
+
+File: app\Http\Controllers\CalendarController.php (5 methods)
+  • public index()
+  • public store()
+  • public show()
+  • public update()
+  • public destroy()
+
+File: app\Http\Controllers\CsvImportController.php (1 methods)
+  • public readFromCSV()
+
+File: app\Http\Controllers\EventController.php (5 methods)
+  • public index()
+  • public store()
+  • public show()
+  • public update()
+  • public destroy()
+
+File: app\Http\Controllers\HomeController.php (4 methods)
+  • public index()
+  • public welcome()
+  • public home()
+  • public downloads()
+
+File: app\Http\Controllers\TaskController.php (5 methods)
+  • public index()
+  • public store()
+  • public show()
+  • public update()
+  • public destroy()
+
+File: app\Http\Controllers\TimezoneController.php (1 methods)
+  • public getTimezones()
+
+File: app\Http\Middleware\RedirectIfAuthenticated.php (1 methods)
+  • public handle()
+
+File: app\Http\Middleware\TrustHosts.php (1 methods)
+  • public hosts()
+
+File: app\Http\Controllers\Helpers\ArrayHelper.php (9 methods)
+  • public isNullOrUndefined()
+  • public insertStrIntoArr()
+  • public arrayToString()
+  • public logChunks()
+  • public removeArrayColumn()
+  • public flattenArray()
+  • public getArrayLevels()
+  • public containsFalseValues()
+  • public mergeArrays()
+
+File: app\Http\Controllers\Helpers\colorUtil.php (7 methods)
+  • public calculateColorContrast()
+  • public RGBtoHex()
+  • public hexToRGB()
+  • public calculateRelLuminance()
+  • public calculateComplementaryColor()
+  • public hexColorToRGB()
+  • public checkColor()
+
+File: app\Http\Controllers\Helpers\DateUtil.php (1 methods)
+  • public get_random_date()
+
+File: app\Http\Controllers\Helpers\MenuHelper.php (1 methods)
+  • public generateNestedMenuArray()
+
+File: app\Http\Controllers\Helpers\StringHelper.php (5 methods)
+  • public checkStringCharacters()
+  • public capitalizeWords()
+  • public generateRandomString()
+  • public getNthOccurrence()
+  • public convertRequestToUrlParameters()
+
+File: app\Http\Controllers\Helpers\Util.php (5 methods)
+  • public FileOK()
+  • public isLineComplete()
+  • public toSQLArray()
+  • public isFormComplete()
+  • public concatenateObjectMembers()
+
+============================================================

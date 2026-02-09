@@ -21,7 +21,11 @@ class User extends Authenticatable implements JWTSubject {
     protected $fillable = [
         'email',
         'password',
-        'email_verified_at'
+        'is_admin',
+        'is_active',
+        'activation_code',
+        'activation_expiry',
+        'activated_at',
     ];
 
     /**
@@ -41,6 +45,8 @@ class User extends Authenticatable implements JWTSubject {
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'activation_expiry' => 'datetime',
+        'activated_at' => 'datetime',
     ];
 
     /**
