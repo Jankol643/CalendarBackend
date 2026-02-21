@@ -295,22 +295,61 @@ class CsvProcessor {
         $maxSizes = [
             'string' => 255,
             'text' => 65535,
-            'title' => 255,
-            'description' => 1000,
-            'name' => 255,
             'email' => 255,
         ];
 
+        // Read the casts array from the Task Model for the types
+        $taskCasts = (new Task())->getCasts();
         $limited = [];
+
         foreach ($data as $key => $value) {
-            if (is_string($value)) {
-                $maxSize = $maxSizes[$key] ?? $maxSizes['string'];
-                if (strlen($value) > $maxSize) {
-                    $value = substr($value, 0, $maxSize);
-                    Log::warning("Field '{$key}' truncated to {$maxSize} characters");
-                }
+            AppLogger::debug($key . ": " . strlen($value));
+            // Skip null values
+            if ($value === null) {
+                $limited[$key] = $value;
+                continue;
             }
-            $limited[$key] = $value;
+
+            // Get the cast type from Task model, default to 'string'
+            $castType = $taskCasts[$key] ?? 'string';
+
+            // Skip non-string/text casts (datetime, integer, boolean, etc.)
+            if (!in_array($castType, ['string', 'text'])) {
+                $limited[$key] = $value;
+                continue;
+            }
+
+            // Determine max size based on field name or cast type
+            if (isset($maxSizes[$key])) {
+                $maxSize = $maxSizes[$key];
+            } else {
+                // Use cast-specific size or default to 'string' size
+                $maxSize = $maxSizes[$castType] ?? $maxSizes['string'];
+            }
+            AppLogger::debug('max size: ' . $maxSize);
+
+            // Convert to string for truncation
+            $stringValue = (string)$value;
+
+            if (strlen($stringValue) > $maxSize) {
+                // Calculate available size for actual content (reserving 3 chars for "...")
+                $truncateSize = max(0, $maxSize - 3);
+                $truncatedValue = substr($stringValue, 0, $truncateSize);
+
+                // Add "..." only if we actually truncated something
+                if ($truncateSize > 0) {
+                    $limited[$key] = $truncatedValue . '...';
+                } else {
+                    $limited[$key] = '...';
+                }
+
+                AppLogger::warning("Field '{$key}' truncated to {$maxSize} characters");
+            } else {
+                // Keep original type if not truncated
+                $limited[$key] = $value;
+            }
+            AppLogger::debug('After truncation:');
+            AppLogger::debug($key . ": " . strlen($value));
         }
         return $limited;
     }

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Event;
 use App\Models\Task;
+use App\Models\ScheduledTask;
 use DateTimeImmutable;
 use Exception;
 use Illuminate\Http\Request;
@@ -13,12 +14,16 @@ use InvalidArgumentException;
 class ScheduleService {
     private Collection $events;
     private Collection $tasks;
+    private string $uploadedId;
 
     public function schedule(Request $request) {
         try {
             // Validate request headers
-            $uploadedId = $this->getUploadIdFromRequest($request);
-            $this->loadEventsAndTasks($uploadedId);
+            $this->uploadedId = $this->getUploadIdFromRequest($request);
+            $this->loadEventsAndTasks($this->uploadedId);
+
+            // Clear existing scheduled tasks for this upload ID
+            ScheduledTask::where('uploaded', $this->uploadedId)->delete();
         } catch (Exception $e) {
             AppLogger::error("Failed to load data: " . $e->getMessage());
             return response()->json(['Failed to load data' . $e->getMessage(), 500]);
@@ -48,17 +53,21 @@ class ScheduleService {
                 }
             }
         }
+
+        // Save scheduled tasks to database
+        $savedScheduledTasks = $this->saveScheduledTasksToDatabase($scheduledTasks);
+
         AppLogger::debug('Scheduled task parts: ');
         AppLogger::debug(json_encode(array_map(fn($t) => [
             'id' => $t->id,
+            'task_id' => $t->task_id,
             'start' => $t->start_datetime,
             'end' => $t->end_datetime
-        ], $scheduledTasks)));
+        ], $savedScheduledTasks)));
 
-        $combined = $this->combineEventsAndTasks($this->events, $scheduledTasks);
-        usort($combined, fn($a, $b) => $a['start_datetime']->getTimestamp() - $b['start_datetime']->getTimestamp());
+        usort($savedScheduledTasks, fn($a, $b) => $a['start_datetime']->getTimestamp() - $b['start_datetime']->getTimestamp());
 
-        return response()->json([$combined], 200);
+        return response()->json([$savedScheduledTasks], 200);
     }
 
     private function getUploadIdFromRequest(Request $request): string {
@@ -91,7 +100,7 @@ class ScheduleService {
             $dueDateA = $a->due_date ?? '';
             $dueDateB = $b->due_date ?? '';
             $dueDateComparison = strcmp($dueDateA, $dueDateB);
-            if ($dueDateComparison !== 0) {
+            if ($dueDateComparison !== 0) { // due dates are different
                 return $dueDateComparison;
             }
             // Then, compare by priority descending
@@ -114,7 +123,7 @@ class ScheduleService {
             return [];
         }
 
-        // Start from the earliest available time (today at 00:00) - ensure DateTimeImmutable
+        // Start from the earliest available time (today at 00:00)
         $currentTime = new DateTimeImmutable('today');
         $endTimeLimit = $dueDate;
 
@@ -124,7 +133,7 @@ class ScheduleService {
         // Add task due date as a constraint
         $busyPeriods[] = [
             'start' => $dueDate,
-            'end' => $dueDate->modify('+1 year') // Effectively blocks after due date
+            'end' => $dueDate->modify('+1 year')
         ];
 
         // Sort busy periods by start time
@@ -135,6 +144,7 @@ class ScheduleService {
         $taskParts = [];
         $maxIterations = 1000;
         $iteration = 0;
+        $taskPartIndex = 1; // Initialize index counter
 
         while ($remainingDuration > 0 && $iteration < $maxIterations) {
             $iteration++;
@@ -165,10 +175,20 @@ class ScheduleService {
             $taskPart->end_datetime = $slot['start']->modify("+{$slotDuration} minutes");
             $taskPart->parent_task_id = $task->id;
 
-            AppLogger::debug("Scheduling task part ID {$task->id} from {$taskPart->start_datetime->format('Y-m-d H:i')} to {$taskPart->end_datetime->format('Y-m-d H:i')} ({$slotDuration} minutes)");
+            // Set calendar_id same as parent task
+            $taskPart->calendar_id = $task->calendar_id ?? null;
+
+            // Add task part index (we'll update the title later when we know total count)
+            $taskPart->task_part_sequence = $taskPartIndex;
+
+            // Store temporary title (will be updated after we know total parts count)
+            $taskPart->title = $task->name;
+
+            AppLogger::debug("Scheduling task part ID {$task->id} from {$taskPart->start_datetime->format('Y-m-d H:i')} to {$taskPart->end_datetime->format('Y-m-d H:i')} ({$slotDuration} minutes), part {$taskPartIndex}");
 
             $taskParts[] = $taskPart;
             $remainingDuration -= $slotDuration;
+            $taskPartIndex++;
 
             // Update busy periods with this new scheduled part
             $busyPeriods[] = [
@@ -181,7 +201,7 @@ class ScheduleService {
                 return $a['start'] <=> $b['start'];
             });
 
-            // Move current time to after this scheduled part - ensure it's DateTimeImmutable
+            // Move current time to after this scheduled part
             $currentTime = $this->convertToDateTimeImmutable($taskPart->end_datetime);
         }
 
@@ -313,40 +333,75 @@ class ScheduleService {
         return null;
     }
 
-    private function hasConflict(DateTimeImmutable $start, int $durationMinutes, array $scheduledParts): bool {
-        AppLogger::debug('Checking for conflict for ' . $start->format('Y-m-d H:i:s') . ', duration: ' . $durationMinutes);
-        $durationSeconds = $durationMinutes * 60;
+    /**
+     * Save scheduled tasks to the database.
+     */
+    private function saveScheduledTasksToDatabase(array $scheduledParts): array {
+        $savedTasks = [];
 
-        // Check against events
-        foreach ($this->events as $event) {
-            $eventStart = $this->convertToDateTimeImmutable($event->start_datetime);
-            $eventEnd = $this->convertToDateTimeImmutable($event->end_datetime);
-            if ($eventStart && $eventEnd && $this->eventsOverlap($start, $durationSeconds, $eventStart, $eventEnd)) {
-                AppLogger::info("Conflict with event ID {$event->id} at {$start->format('Y-m-d H:i')}");
-                AppLogger::debug($event);
-                return true;
-            }
-        }
-
-        // Check against scheduled task parts
+        // First, group task parts by parent task ID to calculate total parts count
+        $taskPartsCount = [];
         foreach ($scheduledParts as $part) {
-            // Handle both array format and object format
-            $partStart = isset($part['start']) ? $this->convertToDateTimeImmutable($part['start']) : (isset($part->start_datetime) ? $this->convertToDateTimeImmutable($part->start_datetime) : null);
-            $partEnd = isset($part['end']) ? $this->convertToDateTimeImmutable($part['end']) : (isset($part->end_datetime) ? $this->convertToDateTimeImmutable($part->end_datetime) : null);
-
-            if ($partStart && $partEnd && $this->eventsOverlap($start, $durationSeconds, $partStart, $partEnd)) {
-                AppLogger::info("Conflict with scheduled task part from {$partStart->format('Y-m-d H:i')} to {$partEnd->format('Y-m-d H:i')}");
-                return true;
+            $parentTaskId = is_array($part) ? ($part['parent_task_id'] ?? null) : ($part->parent_task_id ?? null);
+            if ($parentTaskId) {
+                $taskPartsCount[$parentTaskId] = ($taskPartsCount[$parentTaskId] ?? 0) + 1;
             }
         }
 
-        return false;
-    }
+        foreach ($scheduledParts as $part) {
+            try {
+                // Extract task ID from the part
+                $taskId = is_array($part) ? ($part['task_id'] ?? $part['id'] ?? null) : $part->id;
+                $parentTaskId = is_array($part) ? ($part['parent_task_id'] ?? null) : ($part->parent_task_id ?? null);
 
-    private function eventsOverlap(DateTimeImmutable $start1, int $durationSeconds, ?DateTimeImmutable $start2, ?DateTimeImmutable $end2): bool {
-        if (!$start2 || !$end2) return false;
-        $end1 = $start1->modify("+$durationSeconds seconds");
-        return ($start1 < $end2 && $end1 > $start2);
+                if (!$taskId) {
+                    AppLogger::warning("Cannot save scheduled task part: missing task ID");
+                    continue;
+                }
+
+                // Get total parts count for this task
+                $totalParts = $taskPartsCount[$parentTaskId] ?? 1;
+                $partSequence = is_array($part) ? ($part['task_part_sequence'] ?? 1) : ($part->task_part_sequence ?? 1);
+
+                // Get the task title/name
+                $taskTitle = is_array($part) ? ($part['title'] ?? $part['name'] ?? 'Task') : ($part->title ?? $part->name ?? 'Task');
+
+                // Create formatted title with part number and total count
+                $formattedTitle = $taskTitle . " ({$partSequence}/{$totalParts})";
+
+                // Prepare data for saving
+                $scheduledTaskData = [
+                    'task_id' => $taskId,
+                    'parent_task_id' => $parentTaskId,
+                    'uploaded' => $this->uploadedId,
+                    'calendar_id' => is_array($part) ? ($part['calendar_id'] ?? null) : ($part->calendar_id ?? null),
+                    'title' => $formattedTitle,
+                    'task_part_sequence' => $partSequence,
+                    'task_parts_count' => $totalParts, // Store total parts count
+                ];
+
+                // Handle start and end datetime
+                if (is_array($part)) {
+                    $scheduledTaskData['start_datetime'] = $this->convertToDateTimeImmutable($part['start_datetime'] ?? $part['start']);
+                    $scheduledTaskData['end_datetime'] = $this->convertToDateTimeImmutable($part['end_datetime'] ?? $part['end']);
+                } else {
+                    $scheduledTaskData['start_datetime'] = $part->start_datetime;
+                    $scheduledTaskData['end_datetime'] = $part->end_datetime;
+                }
+
+                // Create and save the scheduled task
+                $scheduledTask = ScheduledTask::create($scheduledTaskData);
+                $savedTasks[] = $scheduledTask;
+
+                AppLogger::debug("Saved scheduled task ID {$scheduledTask->id} for task {$taskId} with title: {$formattedTitle}");
+            } catch (Exception $e) {
+                AppLogger::error("Failed to save scheduled task part: " . $e->getMessage());
+            }
+        }
+
+        AppLogger::info("Saved " . count($savedTasks) . " scheduled tasks to database for upload ID: {$this->uploadedId}");
+
+        return $savedTasks;
     }
 
     private function convertToDateTimeImmutable($dt): ?DateTimeImmutable {
@@ -369,43 +424,5 @@ class ScheduleService {
             }
         }
         return null;
-    }
-
-    private function combineEventsAndTasks($events, $tasks): array {
-        $combined = [];
-
-        /** @var Event $event */
-        foreach ($events as $event) {
-            if (isset($event->start_datetime, $event->end_datetime)) {
-                $start = $this->convertToDateTimeImmutable($event->start_datetime);
-                $end = $this->convertToDateTimeImmutable($event->end_datetime);
-                if ($start && $end) {
-                    $combined[] = [
-                        'type' => 'event',
-                        'start_datetime' => $start,
-                        'end_datetime' => $end,
-                        'model' => $event
-                    ];
-                }
-            }
-        }
-
-        /** @var Task $task */
-        foreach ($tasks as $task) {
-            if (isset($task->start_datetime, $task->end_datetime)) {
-                $start = $this->convertToDateTimeImmutable($task->start_datetime);
-                $end = $this->convertToDateTimeImmutable($task->end_datetime);
-                if ($start && $end) {
-                    $combined[] = [
-                        'type' => 'task',
-                        'start_datetime' => $start,
-                        'end_datetime' => $end,
-                        'model' => $task
-                    ];
-                }
-            }
-        }
-
-        return $combined;
     }
 }

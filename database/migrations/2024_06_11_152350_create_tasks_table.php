@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\Schema;
 final class CreateTasksTable extends Migration {
 
     public function up(): void {
-        //TODO: Seeder anpassen und ausführen
         Schema::create('tasks', static function (Blueprint $table): void {
             $table->id();
             $table->foreignId('calendar_id')->constrained()->onDelete('cascade');
@@ -20,10 +19,6 @@ final class CreateTasksTable extends Migration {
             $table->integer('duration')->nullable();
             // Priority
             $table->integer('priority')->nullable();
-            // Scheduled start time
-            $table->timestamp('start_datetime')->nullable();
-            // Scheduled end time
-            $table->timestamp('end_datetime')->nullable();
             $table->foreignId('parent_task_id')->nullable()->constrained('tasks')->onDelete('cascade');
             $table->string('uploaded');
             $table->timestamps();

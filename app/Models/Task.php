@@ -18,8 +18,6 @@ class Task extends Model {
         'duration',
         'priority',
         'calendar_id',
-        'start_datetime',
-        'end_datetime',
         'parent_task_id',
         'uploaded',
     ];
@@ -30,9 +28,9 @@ class Task extends Model {
      * @var array
      */
     protected $casts = [
+        'name' => 'string',
+        'description' => 'string',
         'due_date' => 'datetime',
-        'start_datetime' => 'datetime',
-        'end_datetime' => 'datetime',
     ];
 
     /**
