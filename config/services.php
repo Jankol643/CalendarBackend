@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types = 1);
+declare(strict_types=1);
 
 return [
 
@@ -32,5 +32,9 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
     ],
-
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI'),
+    ],
 ];

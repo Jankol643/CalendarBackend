@@ -26,6 +26,7 @@ class User extends Authenticatable implements JWTSubject {
         'activation_code',
         'activation_expiry',
         'activated_at',
+        'google_id',
     ];
 
     /**
